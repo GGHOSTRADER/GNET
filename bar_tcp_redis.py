@@ -23,6 +23,10 @@ STREAM_NAME = "bars_raw"  # <---- If this does not match, wont transmit either
 
 
 def main():
+
+    # READING & CONNECTING
+
+    # REDIS -----------------------------------------------------------------------------------------------------
     # Connect to Redis1
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     if r.ping():
@@ -32,6 +36,7 @@ def main():
     else:
         print("1) [bar_server] Failed to connect to Redis1")
 
+    # TCP -----------------------------------------------------------------------------------------------------
     # Connect to TCP
     print(f"2) [bar_server] Listening TCP\n-Host:{HOST}\n-Port:{PORT} ")
     # Create Server socket
@@ -97,7 +102,7 @@ def main():
                         bar_num,
                     ) = parts
 
-                    # Append to Redis1 Stream XADD is the append command
+                    # Append data recieved from TCP and parsed to Redis1 Stream
                     r.xadd(
                         STREAM_NAME,
                         {
