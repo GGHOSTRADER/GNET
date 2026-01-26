@@ -4,22 +4,22 @@
 # Each line received is parsed and appended to a Redis Stream named "bars_raw"
 # ---------------------------------------------------------------------------------
 
+from networking.redis_tool import get_redis_connection
+from config.setting import (
+    TCP_HOST,
+    TCP_PORT,
+    REDIS1_HOST,
+    REDIS1_PORT,
+    REDIS1_STREAM_NAME,
+)
 import socket
 from datetime import datetime
 import redis
 
-
-# -----------------------------------------------------------------
-# SAME IPv4 for Redis1 & TCP SERVER  but differnt PORTS
-# 127.x.x.x is local loopback address
-# 0.0.0.0 means listen on all interfaces (Is risky)
-HOST = "127.0.0.1"
-PORT = 9009
-
-REDIS_HOST = "127.0.0.1"
-REDIS_PORT = 6381  # <------ must match REDIS1
-STREAM_NAME = "bars_raw"  # <---- If this does not match, wont transmit either
-# -----------------------------------------------------------------
+# 🟦 ADD HERE (imports): you need the codec/validator at the boundary
+from bar_codec import parse_csv_line, bar_to_redis_fields
+from bar_contract import validate_sequence, ContractError
+from bar_codec import DecodeError
 
 
 def main():
@@ -28,17 +28,11 @@ def main():
 
     # REDIS -----------------------------------------------------------------------------------------------------
     # Connect to Redis1
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    if r.ping():
-        print(
-            f"1) [bar_server] Connected to Redis1 \n-Host:{REDIS_HOST}\n-Port:{REDIS_PORT}\n-Stream Name:{STREAM_NAME}\n"
-        )
-    else:
-        print("1) [bar_server] Failed to connect to Redis1")
+    r = get_redis_connection(REDIS1_HOST, REDIS1_PORT, REDIS1_STREAM_NAME)
 
     # TCP -----------------------------------------------------------------------------------------------------
     # Connect to TCP
-    print(f"2) [bar_server] Listening TCP\n-Host:{HOST}\n-Port:{PORT} ")
+    print(f"2) [bar_server] Listening TCP\n-Host:{TCP_HOST}\n-Port:{TCP_PORT} ")
     # Create Server socket
     # AF_INET = IPv4
     # SOCK_STREAM = TCP (reliable byte stream)
@@ -47,7 +41,7 @@ def main():
         # Lets server restart
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # Bind server to the host and port
-        s.bind((HOST, PORT))
+        s.bind((TCP_HOST, TCP_PORT))
         # Que incoming connectionsS
         s.listen(5)
 
@@ -87,38 +81,60 @@ def main():
                         print(f"[bar_server] Malformed line: {line}")
                         continue
 
-                    # Unpacks the data into the variables
-                    (
-                        symbol,
-                        date,
-                        time_,
-                        open_,
-                        high,
-                        low,
-                        close,
-                        up,
-                        down,
-                        vwap,
-                        bar_num,
-                    ) = parts
+                    # 🟨 ADD HERE: parse + cast + validate BEFORE redis
+                    try:
+                        bar = parse_csv_line(line)  # CSV -> typed Bar + validate_bar()
+                    except (DecodeError, ContractError) as e:
+                        print(
+                            f"[bar_server] Decode/Contract violation: {e} | line={line}"
+                        )
+                        continue
 
+                    # ⬛ TAKE OUT (replaced by fields)
+                    # Unpacks the data into the variables
+                    # (
+                    #    symbol,
+                    #    date,
+                    #    time_,
+                    #    open_,
+                    #    high,
+                    #    low,
+                    #    close,
+                    #    up,
+                    #    down,
+                    #    vwap,
+                    #    bar_num,
+                    # ) = parts
+
+                    # 🟥 ADD HERE: choose the payload you write to Redis
+                    fields = bar_to_redis_fields(bar)  # canonical strings
+
+                    # ⬛ TAKE OUT (replaced by fields)
                     # Append data recieved from TCP and parsed to Redis1 Stream
+                    # r.xadd(
+                    #    REDIS1_STREAM_NAME,
+                    #    {
+                    #        "symbol": symbol,
+                    #        "date": date,
+                    #        "time": time_,
+                    #        "open": open_,
+                    #        "high": high,
+                    #        "low": low,
+                    #        "close": close,
+                    #        "up": up,
+                    #        "down": down,
+                    #        "vwap": vwap,
+                    #        "bar_num": bar_num,
+                    #    },
+                    #    maxlen=1_000,  # prevent unbounded growth, max number
+                    #    approximate=True,
+                    # )
+
+                    # 🟥 ADD HERE: new xadd uses the canonical payload
                     r.xadd(
-                        STREAM_NAME,
-                        {
-                            "symbol": symbol,
-                            "date": date,
-                            "time": time_,
-                            "open": open_,
-                            "high": high,
-                            "low": low,
-                            "close": close,
-                            "up": up,
-                            "down": down,
-                            "vwap": vwap,
-                            "bar_num": bar_num,
-                        },
-                        maxlen=1_000,  # prevent unbounded growth, max number
+                        REDIS1_STREAM_NAME,
+                        fields,
+                        maxlen=1_000,
                         approximate=True,
                     )
 
