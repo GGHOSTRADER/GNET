@@ -380,6 +380,9 @@ def parse_structured_bar(
         vol_raw = fields.get("volume", None)
         volume = float(vol_raw) if vol_raw is not None else float(up + down)
 
+        print(
+            f" high {float(fields.get('high'))}    low {float(fields.get('low'))} "
+        )  # $$$$$$$$$$$$$$$$$$
         return {
             "timestamp": ts,
             "Datetime": ts,
@@ -666,6 +669,10 @@ def ingest_and_compute(
     df1 = add_technical_indicators(df0)
     latest = compute_latest_features(df1, state)
 
+    # 👇 PRINT RAW FEATURES HERE $$$$$$$$$$$$$$$$$$$$$$$$
+    print("RAW FEATURES:")  # $$$$$$$$$$$$$$$$$$$$$$$$
+    print(latest)  # $$$$$$$$$$$$$$$$$$$$$$$$
+
     transformed = apply_feature_transform(latest, state.bundle)
     if transformed.empty:
         return None
@@ -730,6 +737,9 @@ def main() -> None:
                         f"🔧 Processed bar #{fe.processed_count}: {bar.get('symbol','UNKNOWN')}  features={len(core)}"
                     )
 
+                    print(
+                        f"    features: {json.dumps(core, default=str)}"
+                    )  # $$$$$$$$$$$$$$$$$$
                     xadd_features(r2, REDIS2_STREAM, features, maxlen=1000)
 
         except KeyboardInterrupt:
