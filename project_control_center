@@ -16,6 +16,7 @@ Work per session:
 28 of Jan 2026
     1) Testing works, understood ContractError and DecodeError
     2) Errors of type is being catched at a casting level and a analysis level
+    3) Build Redis Documentation
 
 To do:
 1) Parsing TCP and Redis, must be modular, so I can input the field coming + Type
