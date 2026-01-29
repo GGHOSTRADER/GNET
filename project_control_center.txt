@@ -1,0 +1,45 @@
+PROJECT CONTROL CENTER
+
+Diagram Project
+
+Description  Artifacts: (File/Tool) {Contract/Documentation}
+----
+1) Tradestation Gets Data (TS SOFTWARE) {None}
+2) Systemd Fires redis-server1 and redis-server2 (XXXXXXXXX) {redis_services_documentation.txt}
+3) EasyLanguage Calls .DLL which binds TCP to host,port and exports data (EL:g_DLL-CPP / dll.cpp / dll:BarBridge.dll) {raw_data_contract.txt}
+4) Python Server pulls data from TCP (tcp_to_redis_connection.py) {raw_data_contract.txt}
+    4.1) parses
+    4.2) cast types
+    4.3) checks validita (type / invariants)
+    4.4) Push data to Redis
+
+
+Work per session:
+----
+26 of Jan 2026
+    1) Started Clean architecture for the project
+    2) Separated Redis 
+    3) Separated config
+    4) Added Live validation to files
+    5) Added Testing file for validation functions 
+27 of Jan 2026
+    1) Testing one function
+    2) Added one more condition to my contract 
+    3) Understanding better how the errors/testing work, understand what is doing in general
+    4) Checked contract again and its good
+    5) Bar_contract.py, test_tcp_data.py and bar_codec.py documentations seem fine
+28 of Jan 2026
+    1) Testing works, understood ContractError and DecodeError
+    2) Errors of type is being catched at a casting level and a analysis level
+    3) Built Redis Documentation
+    4) Organized incomplite files into the folder named mess_files
+29 of jan 2026
+    1) project_control_center has a flow now for easier mental launching of project and reference
+    2) tcp_to_redis_connection.py seems to be working properly
+
+To do:
+----
+1) Parsing TCP and Redis, must be modular, so I can input the field coming + Type
+2) Prepare paper for arXiv
+3) Work on features file now
+

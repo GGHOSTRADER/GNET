@@ -1,12 +1,19 @@
 TS PROJECT
 
-Done
-1) Contract:  Raw Data
-2) Document Script : Server TCP + Redis 
+11 Data points send from Tradestation to Python server through TCP using .dll file created in c++
 
-To do
-1) Contract Feature Engineering
-2) Document SystemD files
+Data:
+1)Symbol
+2)Date
+3)Time
+4)Open
+5)High
+6)Low
+7)Close
+8)Up
+9)Down
+10)Vwap
+11)Bar Number
 
 Data exported from Tradestation into Python server Through TCP
 ----------------------------------------------------------------------
