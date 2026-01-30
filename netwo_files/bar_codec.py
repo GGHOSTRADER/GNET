@@ -66,7 +66,7 @@ from __future__ import annotations
 
 from typing import Dict, Any, Mapping
 
-from bar_contract import Bar, validate_bar
+from netwo_files.bar_contract import Bar, validate_bar
 
 
 class DecodeError(ValueError):

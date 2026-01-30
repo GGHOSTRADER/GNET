@@ -4,7 +4,7 @@
 # Each line received is parsed and appended to a Redis Stream named "bars_raw"
 # ---------------------------------------------------------------------------------
 
-from networking.redis_tool import get_redis_connection
+from netwo_files.redis_tool import get_redis_connection
 from config.setting import (
     TCP_HOST,
     TCP_PORT,
@@ -18,8 +18,8 @@ import redis
 
 # 🟦 ADD HERE (imports): you need the codec/validator at the boundary
 from bar_codec import parse_csv_line, bar_to_redis_fields
-from bar_contract import validate_sequence, ContractError
-from bar_codec import DecodeError
+from netwo_files.bar_contract import validate_sequence, ContractError
+from netwo_files.bar_codec import DecodeError
 
 
 def main():

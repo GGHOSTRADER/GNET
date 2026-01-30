@@ -69,8 +69,8 @@ This distinction matters operationally:
 
 import pytest
 
-from bar_contract import Bar, validate_bar, validate_sequence, ContractError
-from bar_codec import parse_csv_line, bar_from_redis_fields, DecodeError
+from netwo_files.bar_contract import Bar, validate_bar, validate_sequence, ContractError
+from netwo_files.bar_codec import parse_csv_line, bar_from_redis_fields, DecodeError
 
 
 def make_bar(**kw) -> Bar:
