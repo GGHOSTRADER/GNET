@@ -3,6 +3,11 @@
 tests/test_bar_contract_and_codec.py
 ====================================
 
+Unit tests (fast)
+
+Files that tests :  bar_contract.py and bar_codec.py
+Invariants: Keep only function tests, no Integration tests or End-to-end tests
+
 What exactly is going on:
 ----
 1) Negative tests ensure that invalid data is caught by your contract and codec.
@@ -32,30 +37,45 @@ $$$$$$$$$$$$$$$
 Trading pipelines fail in the worst way: silently.
 This suite is your tripwire.
 
-What we test (and why)
-----------------------
-Your design has two modules:
-
-1) bar_contract.py
-   - Bar dataclass (typed representation)
-   - validate_bar(bar): stateless invariants (single bar)
-   - validate_sequence(prev, curr): stateful invariant (bar_num monotonic)
-
-2) bar_codec.py
-   - parse_csv_line(line): decode TCP CSV -> cast -> validate -> Bar
-   - bar_from_redis_fields(fields): decode Redis bytes/strings -> cast -> validate -> Bar
-
-Therefore tests are grouped as:
-
-A) Contract tests
-   - Each invariant passes on good input
-   - Each invariant fails when we violate it intentionally
-
-B) Codec tests
-   - Good CSV -> typed Bar
-   - Bad CSV -> DecodeError or ContractError
-   - Good Redis fields -> typed Bar
-   - Missing/invalid Redis fields -> DecodeError
+-------------------------------------------------------------------------------
+Test Index (must match body order)
+-------------------------------------------------------------------------------
+[01] test_validate_bar_good_passes — Valid bar passes all invariants
+[02] test_symbol_invalid — Rejects empty or nonstring symbol
+[03] test_date_invalid_month — Rejects month outside valid range
+[04] test_date_invalid_day — Rejects day outside valid range
+[05] test_time_seconds_range — Rejects time outside daily bounds
+[06] test_prices_must_be_positive — Rejects nonpositive OHLC price values
+[07] test_high_ge_open — Rejects high less than open
+[08] test_OHLC_type — Rejects OHLC fields with nonfloat
+[09] test_open_ge_low — Rejects open lower than low
+[10] test_close_within_low_high — Rejects close outside low-high bounds
+[11] test_up_down_non_negative — Rejects negative up or down
+[12] test_up_down_type — Rejects up/down fields with nonint
+[13] test_vwap_non_negative — Rejects negative VWAP values always
+[14] test_bar_num_non_negative — Rejects negative bar_num values always
+[15] test_sequence_monotonic_same_symbol_date — Enforces monotonic bar_num within session
+[16] test_sequence_reset_allowed_new_date_or_symbol — Allows resets across date or symbol
+[17] test_parse_csv_line_good — Parses valid CSV into typed Bar
+[18] test_parse_csv_line_bad_field_count — Rejects CSV with wrong fieldcount
+[19] test_parse_csv_line_cast_error — Rejects CSV when casting fails
+[20] test_parse_csv_line_contract_error — Rejects CSV when invariants violated
+[21] test_bar_from_redis_fields_bytes_ok — Decodes Redis bytes fields into Bar
+[22] test_bar_from_redis_fields_missing_key — Rejects Redis missing required fields
+[23] test__as_str_decodes_bytes_strict_utf8 — Decodes UTF-8 bytes into string
+[24] test__as_str_non_bytes_falls_back_to_str — Stringifies non-bytes values consistently always
+[25] test_bar_to_redis_fields_encodes_canonical_strings — Encodes bar into canonical strings
+[26] test_bar_to_redis_fields_rejects_invalid_bar_via_contract — Rejects invalid bar during encoding
+[27] test_parse_xread_to_bars_none_returns_empty_batch — None input yields empty batch
+[28] test_parse_xread_to_bars_requires_list_top_level — Rejects XREAD result not list
+[29] test_parse_xread_to_bars_rejects_bad_stream_block_shape — Rejects stream block wrong shape
+[30] test_parse_xread_to_bars_requires_entries_list — Rejects entries container not list
+[31] test_parse_xread_to_bars_rejects_bad_entry_shape — Rejects entry tuple wrong shape
+[32] test_parse_xread_to_bars_requires_fields_mapping — Rejects fields not mapping type
+[33] test_parse_xread_to_bars_happy_path_multiple_streams_bytes_and_str — Flattens payload, tracks last ids
+[34] test_parse_xread_to_bars_propagates_decode_error_from_fields — Propagates DecodeError from bad fields
+[35] test_parse_xread_to_bars_propagates_contract_error_from_bar_validation — Propagates ContractError from invalid bar
+-------------------------------------------------------------------------------
 
 Important distinction: DecodeError vs ContractError
 ---------------------------------------------------
@@ -65,12 +85,21 @@ ContractError: you could interpret it, but it violates invariants (open <= 0, hi
 This distinction matters operationally:
 - DecodeError typically means malformed line / corruption / version mismatch
 - ContractError means the data is "well-formed" but logically invalid for your domain
+- XReadShapeError means the OUTER XREAD payload shape is wrong (nesting/list/tuple/mapping), before field casting even begins
 """
 
 import pytest
 
 from netwo_files.bar_contract import Bar, validate_bar, validate_sequence, ContractError
 from netwo_files.bar_codec import parse_csv_line, bar_from_redis_fields, DecodeError
+
+# 🟩 ADDED 2026-02-02
+from netwo_files.bar_codec import (
+    _as_str,
+    bar_to_redis_fields,
+    parse_xread_to_bars,
+    XReadShapeError,
+)
 
 
 def make_bar(**kw) -> Bar:
@@ -147,9 +176,11 @@ def make_csv(**kw) -> str:
 # -------------------------------------------------------------------
 
 
+# [01]
 def test_validate_bar_good_passes():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects no exception; baseline control)
 
     Why this test exists
     --------------------
@@ -159,10 +190,12 @@ def test_validate_bar_good_passes():
     validate_bar(make_bar())
 
 
+# [02]
 @pytest.mark.parametrize("bad_symbol", ["", None, 3, 10.2])
 def test_symbol_invalid(bad_symbol):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       symbol must not be null and must be non-empty
@@ -177,9 +210,11 @@ def test_symbol_invalid(bad_symbol):
         validate_bar(b)
 
 
+# [03]
 def test_date_invalid_month():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule (for TS YYYMMDD):
       month must be in [1,12]
@@ -196,9 +231,11 @@ def test_date_invalid_month():
         validate_bar(make_bar(date=1261325))
 
 
+# [04]
 def test_date_invalid_day():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       day must be in [1,31] (basic structural day validation)
@@ -210,10 +247,12 @@ def test_date_invalid_day():
         validate_bar(make_bar(date=1260132))
 
 
+# [05]
 @pytest.mark.parametrize("t", [-1, 86400])
 def test_time_seconds_range(t):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       time_s must be in [0, 86399]
@@ -227,10 +266,12 @@ def test_time_seconds_range(t):
         validate_bar(make_bar(time_s=t))
 
 
+# [06]
 @pytest.mark.parametrize("field", ["open", "high", "low", "close"])
 def test_prices_must_be_positive(field):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       open/high/low/close must be > 0 (non-zero positive)
@@ -244,9 +285,11 @@ def test_prices_must_be_positive(field):
         validate_bar(make_bar(**{field: 0.0}))
 
 
+# [07]
 def test_high_ge_open():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       high must be >= open
@@ -260,11 +303,12 @@ def test_high_ge_open():
         validate_bar(make_bar(open=100.0, high=99.9))
 
 
-# 🟩 ADDED
+# [08]
 @pytest.mark.parametrize("field", ["open", "high", "low", "close"])
 def test_OHLC_type(field):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       Open , High , Low, Close are instance of float
@@ -278,9 +322,11 @@ def test_OHLC_type(field):
         validate_bar(make_bar(**{field: "banana"}))
 
 
+# [09]
 def test_open_ge_low():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       open must be >= low
@@ -291,9 +337,11 @@ def test_open_ge_low():
         validate_bar(make_bar(open=99.0, low=99.5))
 
 
+# [10]
 def test_close_within_low_high():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       close must be within [low, high]
@@ -312,10 +360,12 @@ def test_close_within_low_high():
         validate_bar(make_bar(close=0.1, low=1.0))
 
 
+# [11]
 @pytest.mark.parametrize("field", ["up", "down"])
 def test_up_down_non_negative(field):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       up/down must be >= 0
@@ -328,11 +378,12 @@ def test_up_down_non_negative(field):
         validate_bar(make_bar(**{field: -1}))
 
 
-# 🟩 ADDED
+# [12]
 @pytest.mark.parametrize("field", ["up", "down"])
 def test_up_down_type(field):
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       up/down type must be int
@@ -345,9 +396,11 @@ def test_up_down_type(field):
         validate_bar(make_bar(**{field: 2.34}))
 
 
+# [13]
 def test_vwap_non_negative():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       vwap >= 0
@@ -363,9 +416,11 @@ def test_vwap_non_negative():
         validate_bar(make_bar(vwap=-0.01))
 
 
+# [14]
 def test_bar_num_non_negative():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     Contract rule:
       bar_num must be >= 0
@@ -378,9 +433,11 @@ def test_bar_num_non_negative():
         validate_bar(make_bar(bar_num=-1))
 
 
+# [15]
 def test_sequence_monotonic_same_symbol_date():
     """
     Test type: Mixed (Positive + Negative)
+    🟨 ADDED: Mixed (asserts success, then expects error)
 
     Stateful contract rule:
       bar_num[x] > bar_num[x-1] within same (symbol, date)
@@ -398,9 +455,11 @@ def test_sequence_monotonic_same_symbol_date():
         validate_sequence(prev, curr_bad)
 
 
+# [16]
 def test_sequence_reset_allowed_new_date_or_symbol():
     """
     Test type: Positive
+    🟨 ADDED: Positive (expects no exception; asserts validity)
 
     Why this test exists
     --------------------
@@ -426,9 +485,11 @@ def test_sequence_reset_allowed_new_date_or_symbol():
 # -------------------------------------------------------------------
 
 
+# [17]
 def test_parse_csv_line_good():
     """
     Test type: Positive
+    🟨 ADDED: Positive (asserts returned types correct)
 
     Why this test exists
     --------------------
@@ -452,9 +513,11 @@ def test_parse_csv_line_good():
     assert isinstance(b.bar_num, int)
 
 
+# [18]
 def test_parse_csv_line_bad_field_count():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects DecodeError raised)
 
     parse_csv_line contract:
       must have exactly 11 fields
@@ -468,9 +531,11 @@ def test_parse_csv_line_bad_field_count():
         parse_csv_line("a,b,c")
 
 
+# [19]
 def test_parse_csv_line_cast_error():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects DecodeError raised)
 
     parse_csv_line should raise DecodeError when types cannot be cast.
 
@@ -486,9 +551,11 @@ def test_parse_csv_line_cast_error():
         parse_csv_line(line)
 
 
+# [20]
 def test_parse_csv_line_contract_error():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects ContractError raised)
 
     parse_csv_line should raise ContractError when data casts fine
     but violates invariants.
@@ -501,9 +568,11 @@ def test_parse_csv_line_contract_error():
         parse_csv_line(line)
 
 
+# [21]
 def test_bar_from_redis_fields_bytes_ok():
     """
     Test type: Positive
+    🟨 ADDED: Positive (asserts decode and casting)
 
     Why this test exists
     --------------------
@@ -531,9 +600,11 @@ def test_bar_from_redis_fields_bytes_ok():
     assert b.date == 1260125
 
 
+# [22]
 def test_bar_from_redis_fields_missing_key():
     """
     Test type: Negative
+    🟨 ADDED: Negative (expects DecodeError raised)
 
     Why this test exists
     --------------------
@@ -549,3 +620,314 @@ def test_bar_from_redis_fields_missing_key():
     """
     with pytest.raises(DecodeError, match="missing fields"):
         bar_from_redis_fields({b"symbol": b"@ES"})
+
+
+# [23] 🟩 ADDED 2026-02-02
+def test__as_str_decodes_bytes_strict_utf8():
+    """
+    Why:
+      _as_str is a tiny helper, but it's a boundary sanitizer.
+      If it silently accepts garbage bytes, downstream casting errors become confusing.
+
+    We test:
+      - valid utf-8 bytes decode cleanly
+
+    🟨 ADDED: Test type: Positive (asserts decoded string)
+    """
+    assert _as_str(b"@ES") == "@ES"
+
+
+# [24] 🟩 ADDED 2026-02-02
+def test__as_str_non_bytes_falls_back_to_str():
+    """
+    Why:
+      Redis keys/values can sometimes be str already (decode_responses=True),
+      and ids/stream names can be non-bytes in mocks.
+      This ensures _as_str normalizes consistently.
+
+    🟨 ADDED: Test type: Positive (asserts string conversion)
+    """
+    assert _as_str("@ES") == "@ES"
+    assert _as_str(123) == "123"
+
+
+# [25] 🟩 ADDED 2026-02-02
+def test_bar_to_redis_fields_encodes_canonical_strings():
+    """
+    Why:
+      bar_to_redis_fields() is new and wasn't tested.
+      If encoding drifts, round-trips and debugging (redis-cli) get messy.
+
+    We test:
+      - required keys exist
+      - date encodes as a string
+      - numeric values are strings
+
+    🟨 ADDED: Test type: Positive (asserts encoded mapping)
+    """
+    b = make_bar(date=1260125)  # valid per contract
+    f = bar_to_redis_fields(b)
+
+    assert set(f.keys()) == {
+        "symbol",
+        "date",
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "up",
+        "down",
+        "vwap",
+        "bar_num",
+    }
+
+    # Date should round-trip as the canonical integer string (no truncation)
+    assert f["date"] == "1260125"
+    assert isinstance(f["date"], str)
+
+    assert isinstance(f["open"], str)
+    assert isinstance(f["bar_num"], str)
+    assert f["symbol"] == "@ES"
+
+
+# [26] 🟩 ADDED 2026-02-02
+def test_bar_to_redis_fields_rejects_invalid_bar_via_contract():
+    """
+    Why:
+      bar_to_redis_fields() calls validate_bar(b).
+      If that call is removed in a refactor, invalid bars could get written to Redis.
+
+    We test:
+      - invalid bar triggers ContractError
+
+    🟨 ADDED: Test type: Negative (expects ContractError raised)
+    """
+    bad = make_bar(open=-1.0)
+    with pytest.raises(ContractError):
+        bar_to_redis_fields(bad)
+
+
+# [27] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_none_returns_empty_batch():
+    """
+    Why:
+      Your parser explicitly treats None as "no data yet" and returns empty.
+      This is an operationally important behavior (no exceptions during idle polls).
+
+    🟨 ADDED: Test type: Positive (asserts empty output)
+    """
+    batch = parse_xread_to_bars(None)
+    assert batch.bars == []
+    assert batch.last_ids == {}
+
+
+# [28] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_requires_list_top_level():
+    """
+    Why:
+      redis-py XREAD returns a list.
+      If a caller passes the wrong thing (mock bug, refactor bug),
+      we want a clear XReadShapeError (not random TypeErrors later).
+
+    🟨 ADDED: Test type: Negative (expects XReadShapeError raised)
+    """
+    with pytest.raises(XReadShapeError, match="must be a list"):
+        parse_xread_to_bars("not-a-list")
+
+
+# [29] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_rejects_bad_stream_block_shape():
+    """
+    Why:
+      Each top-level item must be (stream_name, entries_list).
+      If the nesting is wrong, we fail fast with XReadShapeError.
+
+    🟨 ADDED: Test type: Negative (expects XReadShapeError raised)
+    """
+    with pytest.raises(XReadShapeError, match=r"item\[0\] must be"):
+        parse_xread_to_bars([("stream_only",)])
+
+
+# [30] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_requires_entries_list():
+    """
+    Why:
+      entries must be a list per redis-py shape.
+
+    🟨 ADDED: Test type: Negative (expects XReadShapeError raised)
+    """
+    with pytest.raises(XReadShapeError, match="must be a list"):
+        parse_xread_to_bars([(b"mystream", "not-a-list")])
+
+
+# [31] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_rejects_bad_entry_shape():
+    """
+    Why:
+      Each entry must be (entry_id, fields_mapping).
+
+    🟨 ADDED: Test type: Negative (expects XReadShapeError raised)
+    """
+    with pytest.raises(XReadShapeError, match="must be \\(id, fields\\)"):
+        parse_xread_to_bars([(b"mystream", [(b"1-0",)])])
+
+
+# [32] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_requires_fields_mapping():
+    """
+    Why:
+      If fields isn't a mapping, bar_from_redis_fields cannot operate.
+      This should be a shape error (outer structure wrong), not DecodeError.
+
+    🟨 ADDED: Test type: Negative (expects XReadShapeError raised)
+    """
+    with pytest.raises(XReadShapeError, match="must be a mapping"):
+        parse_xread_to_bars([(b"mystream", [(b"1-0", ["not", "a", "dict"])])])
+
+
+# [33] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_happy_path_multiple_streams_bytes_and_str():
+    """
+    Why:
+      This is the *core* purpose of the new adapter:
+      - unwrap XREAD nesting
+      - normalize bytes/str
+      - delegate to bar_from_redis_fields()
+      - return flattened bars + per-stream last_ids
+
+    We test:
+      - flatten order follows payload order
+      - last_ids updated per stream with the last entry id seen
+
+    🟨 ADDED: Test type: Positive (asserts flatten + last_ids)
+    """
+    xread_payload = [
+        (
+            b"stream_A",
+            [
+                (
+                    b"1-0",
+                    {
+                        b"symbol": b"@ES",
+                        b"date": b"1260125",
+                        b"time": b"36000",
+                        b"open": b"100.0",
+                        b"high": b"101.0",
+                        b"low": b"99.5",
+                        b"close": b"100.5",
+                        b"up": b"4",
+                        b"down": b"0",
+                        b"vwap": b"100.2",
+                        b"bar_num": b"26",
+                    },
+                ),
+                (
+                    b"2-0",
+                    {
+                        b"symbol": b"@ES",
+                        b"date": b"1260125",
+                        b"time": b"36001",
+                        b"open": b"100.1",
+                        b"high": b"101.1",
+                        b"low": b"99.6",
+                        b"close": b"100.6",
+                        b"up": b"5",
+                        b"down": b"0",
+                        b"vwap": b"100.3",
+                        b"bar_num": b"27",
+                    },
+                ),
+            ],
+        ),
+        (
+            "stream_B",
+            [
+                (
+                    "9-0",
+                    {
+                        "symbol": "@NQ",
+                        "date": "1260125",
+                        "time": "36000",
+                        "open": "200.0",
+                        "high": "201.0",
+                        "low": "199.5",
+                        "close": "200.5",
+                        "up": "2",
+                        "down": "1",
+                        "vwap": "200.2",
+                        "bar_num": "10",
+                    },
+                )
+            ],
+        ),
+    ]
+
+    batch = parse_xread_to_bars(xread_payload)
+
+    assert len(batch.bars) == 3
+    assert batch.bars[0].symbol == "@ES"
+    assert batch.bars[1].time_s == 36001
+    assert batch.bars[2].symbol == "@NQ"
+
+    assert batch.last_ids == {"stream_A": "2-0", "stream_B": "9-0"}
+
+
+# [34] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_propagates_decode_error_from_fields():
+    """
+    Why:
+      If the OUTER XREAD shape is fine but fields are missing, that's DecodeError,
+      not XReadShapeError. This distinction is exactly why you created 2 error types.
+
+    We test:
+      - valid XREAD structure
+      - missing required bar fields
+      - raises DecodeError
+
+    🟨 ADDED: Test type: Negative (expects DecodeError raised)
+    """
+    payload = [(b"mystream", [(b"1-0", {b"symbol": b"@ES"})])]
+    with pytest.raises(DecodeError, match="missing fields"):
+        parse_xread_to_bars(payload)
+
+
+# [35] 🟩 ADDED 2026-02-02
+def test_parse_xread_to_bars_propagates_contract_error_from_bar_validation():
+    """
+    Why:
+      If parsing/casting works but invariants fail (open <= 0 etc),
+      that must bubble up as ContractError (domain-level invalid bar).
+
+    We test:
+      - structure OK
+      - casts OK
+      - invariant violated => ContractError
+
+    🟨 ADDED: Test type: Negative (expects ContractError raised)
+    """
+    payload = [
+        (
+            b"mystream",
+            [
+                (
+                    b"1-0",
+                    {
+                        b"symbol": b"@ES",
+                        b"date": b"1260125",
+                        b"time": b"36000",
+                        b"open": b"-1.0",  # castable but invalid
+                        b"high": b"101.0",
+                        b"low": b"99.5",
+                        b"close": b"100.5",
+                        b"up": b"4",
+                        b"down": b"0",
+                        b"vwap": b"100.2",
+                        b"bar_num": b"26",
+                    },
+                )
+            ],
+        )
+    ]
+    with pytest.raises(ContractError):
+        parse_xread_to_bars(payload)

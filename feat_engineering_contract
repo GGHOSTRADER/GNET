@@ -1,0 +1,20 @@
+Feature Engineering Contract
+
+*COMMENT: MUST INCLUDE CONTENT OF PRE MADE FUNCTIONS AND CLASSES
+
+
+modSlope5
+----
+Input :  5 bar window Object called b, b class that contains the attributes .low , .high .close , .bar_num
+Input Origin: Not this Process object will be imported/pulled
+Style: Pure Function , Clean architecture
+Data type : Float 
+Description : Slope of the last 5 bars
+Calculation : (high + low + close)/3[0] - (high + low + close)/3[4]
+invariants : 
+	bar value = math.isfinite(modSlope5) # To cover Nan and inf
+	end points difference = bar_num[-1] - bar_num[-5] == 4,  
+	Buffer = len("buffer name") => 5 , 
+	Bar continuinity = all(bar_nums[i] == bar_nums[i-1] + 1 for i in range(1, 5))
+
+

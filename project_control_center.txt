@@ -39,11 +39,29 @@ Work per session:
     3) Started generating first feature with contract modslope5
 30 of Jan 2026
     1) Researched why pytest needed to modify the sys.path on the pytest.init
-    2) Learned Grep can be used to find imports inside files, very usefull
+    2) Learned Grep can be used to find imports inside files, very usefull BUT grep wont search file names 
     3) The command python -c "string" lets me run a micro script from the terminal using python
     4) Every command in terminal comes with its own options, there are no global options
     5) --help  and man command, tells me what options are available for that command
     6) Changed some folders numbers to more generic ones to avoid name collutions 
+31 of Jan 2026
+    1) Started by research on how to differentiate the tests and apparently is used only at the boundaries. 
+        Intra function contract must be more objective and direct
+        Boundary checks: structure + domain validity
+        Internal checks: transformation preconditions + output sanity
+        Steps inside: use cases + transformers + domain services
+1 of Feb 2026
+    1) Test Suit is for offline testing     
+        When there is code changes
+        Before deployment
+2 of Feb 2026
+    1) Realized:
+        - The test suite is nothing  more than pretesting that the code will do what is SUPPOSED
+        to do
+        - The live testing is for making sure that the data is what is supposed to be and that System
+        is behaving properly.
+    2) Added Redis parsing, casting and live tests
+    3) Updated Test suite to include new functions
 
 To do:
 ----
@@ -54,4 +72,5 @@ To do:
     - Understand the test and structure, why are you doing the flow in certain way
     - Is the test correct? are you doing the test live  or cold?
 4) Add documentation, contracts and flow for the tests
+5) Build files macro view to feed the LLM for context
 
