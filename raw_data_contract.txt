@@ -44,7 +44,7 @@ TOTAL SECONDS = X + Y + Z
 Price at which this bar started trading
 Value type = Double
 Calculation = None
-Invariant = Open > 0 , Open type isinstance float
+Invariant = Open > 0 , Open isinstance float
 
 5) High:
 Highest Price traded in the trading interval
@@ -74,14 +74,14 @@ Invariant = Up >= 0 , Up type isinstance int
 Meaning = Market Sell orders
 Value type = Interger
 Calculation = None
-Invariant = Down >= 0 , Down type isinstance int
+Invariant = Down >= 0 , Down isinstance int
 
 10) Vwap:
 Meaning = Volume Weighted Average Price since market Open
 Value type = Double
 Components = Volume: Sum of transactions (Up + Down), High: Highest price traded in the interval, Low: Lowest traded price in the interval, Close: Last traded price in the interval.	
-Calculation = Sum(((high+low+close)/3)*(Up+Down)) / Sum(Up+Down)
-Invariant = vwap >= 0 , Vwap type isinstance Float
+Calculation = Sum(((high+low+close)/3)*(Up+Down)) / Sum(Up+Down)   {Not calculated here}
+Invariant = vwap >= 0 , Vwap isinstance Float
 
 11) Bar Number:
 Meaning = Bar number Since the start of bar
