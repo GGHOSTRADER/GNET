@@ -65,14 +65,23 @@ Work per session:
     4) Linked my git to my github and now I can push and pull
 3 of Feb 2026
     1) Improved Feature contract, now got Global and Interal contracts
+4 of Feb 2026
+    1) Learned what env variables are : The use of .env file, uploading the variables to the os and then grabing them from there 
+        with os library. Important to also use path library to make the full path deterministic.
+5 of Feb 2026
+    1) New file for features, seems to be working
+    2) Updated how to do the contract, more expecific on the import paths and be sure to say they are import and not to do
+    3) Short summary of inputs and 4 word summary would be helpful for prompting.
+
 
 To do:
 ----
 1) tcp_to_redis_connection needs redesigning, a an application layer...Right now all together
 2) Prepare paper for arXiv
 3) Work on features file now
-    - Implementation of the Contract
+    - Improving contract and prompting of it
     - Build field which includes redis connection, parses, global live tests and local feature tests for contract
+    - Add runtime chain and dependecy graph, also summary of functions must contain input
 4) Build files macro view to feed the LLM for context, this can be feed into the LLM quickly and into the Contract/prompting
-5) Build functions dependency graph for clear macro view
+5) Difference between dependency graph and runtime chain
 

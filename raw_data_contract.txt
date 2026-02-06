@@ -27,7 +27,7 @@ Invariants = symbol != null , symbol type == string
 Date in YYMMDD
 Value type = Interger
 Calculation = Ts uses a propietary interger version which is 1900 the starting point YYYMMDD where YYY = years since 1900
-Example =  April 12 of 1999 = 990412
+Example =  April 12 of 2026 = 1260412
 Invariants =  date > 1260000 , 12 >= MM >= 1 , 31 >= DD >= 1,
 
 3) Time in Seconds:

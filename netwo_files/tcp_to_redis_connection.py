@@ -2,6 +2,12 @@
 # TS -- > TCP  ---> Redis Stream
 # A TCP server that listens for incoming bar data in CSV format From Tradestation
 # Each line received is parsed and appended to a Redis Stream named "bars_raw"
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# TO RUN AS A MODULE INSTEAD OF A SCRIPT (for better imports):
+# python -m netwo_files.tcp_to_redis_connection
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 # ---------------------------------------------------------------------------------
 
 from netwo_files.redis_tool import get_redis_connection
@@ -17,7 +23,7 @@ from datetime import datetime
 import redis
 
 # 🟦 ADD HERE (imports): you need the codec/validator at the boundary
-from bar_codec import parse_csv_line, bar_to_redis_fields
+from netwo_files.bar_codec import parse_csv_line, bar_to_redis_fields
 from netwo_files.bar_contract import validate_sequence, ContractError
 from netwo_files.bar_codec import DecodeError
 

@@ -1,13 +1,17 @@
+*COMMENT: MUST INCLUDE CONTENT OF PRE MADE FUNCTIONS AND CLASSES
+
 Feature Engineering Contract
 
-*COMMENT: MUST INCLUDE CONTENT OF PRE MADE FUNCTIONS AND CLASSES
 
 
 Global (Done once before any feature calculations):
 Steps
-1) Connect to redis using get_redis_connection function from newtwo_files.redis_tool.py
-2) xread from redis using parse_xread_to_bars , XReadBatch ,XReadShapeError from bar_codec.py
-3) Parse, create container, cast type with bar_from_redis_fields ,_as_str , DecodeError from bar_codec.py
+------------------------------------------------------------
+Existing functions and files that must be imported and used
+------------------------------------------------------------
+1) Connect to redis using get_redis_connection function from netwo_files.redis_tool.py Import config from config.setting.py
+2) xread from redis using parse_xread_to_bars , XReadBatch ,XReadShapeError from netwo_files.bar_codec.py
+3) Parse, create container, cast type with bar_from_redis_fields ,_as_str , DecodeError from netwo_files.bar_codec.py
 
 Live tests 
 1) len(xread Redis data) = 11 
@@ -23,7 +27,7 @@ Invariants = symbol != null , symbol type == string
 Date in YYMMDD
 Value type = Interger
 Calculation = Ts uses a propietary interger version which is 1900 the starting point YYYMMDD where YYY = years since 1900
-Example =  April 12 of 1999 = 990412
+Example =  April 12 of 2026 = 1260412
 Invariants =  date > 1260000 , 12 >= MM >= 1 , 31 >= DD >= 1,
 
 2.3) Time in Seconds:
