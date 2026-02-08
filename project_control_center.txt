@@ -73,7 +73,8 @@ Work per session:
     2) Updated how to do the contract, more expecific on the import paths and be sure to say they are import and not to do
     3) Short summary of inputs and 4 word summary would be helpful for prompting.
 8 of Feb 2026
-    1) Organized and passed to 
+    1) Organized agent flow and made its on repo to track it
+    2) Refreshing software architecture terms to faster interaction with LLMs
 
 
 To do:
@@ -86,5 +87,6 @@ To do:
     - Print bar and check
     - Add runtime chain and dependecy graph, also summary of functions must contain input
 4) Build files macro view to feed the LLM for context, this can be feed into the LLM quickly and into the Contract/prompting
-5) Difference between dependency graph and runtime chain
+5) Difference between dependency graph and runtime chain 
+    Keep doing this
 
