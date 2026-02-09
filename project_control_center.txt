@@ -75,18 +75,30 @@ Work per session:
 8 of Feb 2026
     1) Organized agent flow and made its on repo to track it
     2) Refreshing software architecture terms to faster interaction with LLMs
+    3) Understand what is failure mode, acceptance criteria, Slice
+9 of Feb 2026
+    1) Got into issues defining failure mode, invariant and acceptance criteria, mostly because I got mixed layers
+    2) Okay layers are the domain, adapters, application , they must not mixed
+    3) There can be data dependency between processes but the ASSUMPTIONS / GUARANTEES define this 
 
 
 To do:
 ----
-1) tcp_to_redis_connection needs redesigning, a an application layer...Right now all together
+1) tcp_to_redis_connection needs redesigning, a an application layer...Right now all together 
+   WHY: All the the parts are messed
+   Reward: Easy to read and implement 
 2) Prepare paper for arXiv
+    Why: Research track for PHD
+    Reward: stay in TW and good distinction 
 3) Work on features file now
     - Improving contract and prompting of it
-    - Verify that the file is actually processing the data correctly
-    - Print bar and check
+    - Verify that the file is actually processing the data correctly + Print bar and check
+    Why: Need correct data to be sure works, but I think this should be addressed with the Test Suite
+    Reward: Pass to next face and trade :)
     - Add runtime chain and dependecy graph, also summary of functions must contain input
-4) Build files macro view to feed the LLM for context, this can be feed into the LLM quickly and into the Contract/prompting
-5) Difference between dependency graph and runtime chain 
-    Keep doing this
+    Why: I get lost in the code most of the time, I get that feeling
+    Reward: Easy mental state rebuilding
+4) FINISH EXAMPLE OF FAILURE MODE AND ACCEPTANCE CRITERIA + ASSUMPTIONS / GUARANTEES
+    Why: I need one clear example to follow
+    Reward: Not feeling lost, Finally find productivity with LLM and BUILD FAST what I want
 
