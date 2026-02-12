@@ -80,6 +80,17 @@ Work per session:
     1) Got into issues defining failure mode, invariant and acceptance criteria, mostly because I got mixed layers
     2) Okay layers are the domain, adapters, application , they must not mixed
     3) There can be data dependency between processes but the ASSUMPTIONS / GUARANTEES define this 
+    4) Data dependency is common between layers, code dependency is the one that is not!!!
+10 of Feb 2026
+    1) Working in my contract, first iteration has some errors, will check with chatgpt
+11 of feb 2026
+    1) USE VERBS for functions, nouns for data
+    2) Downstream and Upstream are used in river terms  
+        Water starts upstream (mountain) and flows downstream (shore)
+12 of feb 2026
+    1) Failure mode is more about mapping the invariant failure to something, not reapeating it
+    2) The acceptance criteria is more about the actual tests, positive vs negative
+    3) I am finishing the correct mapping of the three categories
 
 
 To do:
@@ -94,10 +105,13 @@ To do:
     - Improving contract and prompting of it
     - Verify that the file is actually processing the data correctly + Print bar and check
     Why: Need correct data to be sure works, but I think this should be addressed with the Test Suite
-    Reward: Pass to next face and trade :)
+    Reward: Pass to next phase and trade :)
     - Add runtime chain and dependecy graph, also summary of functions must contain input
     Why: I get lost in the code most of the time, I get that feeling
     Reward: Easy mental state rebuilding
+    - Understand upstream and Downstream
+    Why: I get lost in the explanations of the jargon
+    Reward: code very fast and efficient with agents
 4) FINISH EXAMPLE OF FAILURE MODE AND ACCEPTANCE CRITERIA + ASSUMPTIONS / GUARANTEES
     Why: I need one clear example to follow
     Reward: Not feeling lost, Finally find productivity with LLM and BUILD FAST what I want
