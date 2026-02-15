@@ -92,7 +92,9 @@ Work per session:
     2) The acceptance criteria is more about the actual tests, positive vs negative
     3) I am finishing the correct mapping of the three categories
     4) Must test the new contract,  was looking at deque
-
+15 of deb 2026
+    1) Finished contract and understanding of type of graphs, now need to implement it
+    2) Tested the contrasct with invariants, failure mode and acceptance criteria, seems to work very well
 
 To do:
 ----
@@ -103,4 +105,9 @@ To do:
     Why: Research track for PHD
     Reward: stay in TW and good distinction 
 3) Understand if learning Jobs in linux is helpful
+    Why: Not a strong one but for knowledge
+    Reward: Doing cool shit like with systemd
+4) Create the next contract for next feature, figure out how to implement also graphs
+    Why: Using the new technique on a new feature will help learn it better and can create while a learn how to use the graphs
+    Reward: One step closer to having a working code
 
