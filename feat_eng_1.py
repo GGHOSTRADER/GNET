@@ -297,12 +297,12 @@ def modSlope5(bars: Sequence[Any]) -> float:
       - continuity within window
       - math.isfinite(output)
     """
-    _require_feature(len(bars) == 5, f"modSlope5 requires 5 bars, got {len(bars)}")
+    _require_feature(len(bars) == 5, f"E_LEN")
 
     nums = [b.bar_num for b in bars]
     _require_feature(
         nums[-1] - nums[0] == 4,
-        f"endpoints not 4 apart: first={nums[0]}, last={nums[-1]}",
+        f"E_GAP",
     )
     _require_feature(
         all(nums[i] == nums[i - 1] + 1 for i in range(1, 5)),

@@ -4,10 +4,10 @@ Feature Engineering Contract
 
 
 
-Global (Done once before any feature calculations):
+BarIngestionWindow (Done once before any feature calculations):
 Steps
 ------------------------------------------------------------
-Existing functions and files that must be imported and used
+Dependencies of Existing functions and files that must be imported and used
 ------------------------------------------------------------
 1) Connect to redis using get_redis_connection function from netwo_files.redis_tool.py Import config from config.setting.py
 2) xread from redis using parse_xread_to_bars , XReadBatch ,XReadShapeError from netwo_files.bar_codec.py
@@ -97,16 +97,37 @@ Internal(per Feature)
 
 modSlope5
 ----
-Input :  5 bar window Object called b, b class that contains the attributes .low , .high .close , .bar_num
-Input Origin: comes from global process
-Style: Pure Function , Clean architecture
-Data type : Float 
-Description : Slope of the last 5 bars
-Calculation : (high[-1] + low[-1] + close[-1])/3 - (high[-5] + low[-5] + close[-5])/3
-invariants : 
-	bar value = math.isfinite(modSlope5) # To cover Nan and inf
-	end points difference = bar_num[-1] - bar_num[-5] == 4,  
-	Buffer = len("buffer name") => 5 , 
-	Bar continuinity = all(bar_nums[i] == bar_nums[i-1] + 1 for i in range(1, 5))
+- Directory Tree: Not needed
+- Code Dependencies: None from previous layers / Functions
+- Input :  5 window Sequence[Bar] with required fields: high, low, close, bar_num
+- Input data type: Deque window
+- Input Origin: Provided by Upstream BarWindow; already cast to numeric types.
+- Output : scalar
+- Output Data Type: Float
+- Style: Pure Function , Clean architecture , No side effect
+- Location: Not in boundary, This function enforces minimal local preconditions (length + continuity).
+- Description : Slope of the last 5 bars
+- Side effects: None
+- Calculation : (bars[-1].high + bars[-1].low + bars[-1].close)/3 - (bars[-5].high + bars[-5].low + bars[-5].close)/3
+- invariants :   
+	Bars in window : E_LEN = len(bars)==5 , 
+	Bar continuinity : E_GAP = all(bars[i].bar_num == bars[i-1].bar_num + 1 for i in range(1, 5))
+	Slope result = Returns Python float
+- Failure Mode: 
+	len(bars) != 5 Raise FeatureContractError("E_LEN: expected 5 bars")
+	Continuity check fails Raise FeatureContractError("E_GAP: non-consecutive bar_num") 
+- Acceptance criteria: 
+	Posite tests
+		Assert result is python float 
+		known fixture returns expected numeric value
+	Negative Tests
+		Raise FeatureContractError if continuinity break of the 5 bars window
+		Raise FeatureContractError with code E_LEN when len(bars) != 5.
+	Non-functional
+		No mutation, deterministic
+- Assumptions / Guarantees : 
+	Data casted and validated by Upstream BarWindow Contract , 
+	High, low and Close they all been revised. 
+- Data dependency: Upstream BarWindow / Bar ingestion
 
 

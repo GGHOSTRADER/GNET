@@ -91,6 +91,7 @@ Work per session:
     1) Failure mode is more about mapping the invariant failure to something, not reapeating it
     2) The acceptance criteria is more about the actual tests, positive vs negative
     3) I am finishing the correct mapping of the three categories
+    4) Must test the new contract,  was looking at deque
 
 
 To do:
@@ -101,18 +102,5 @@ To do:
 2) Prepare paper for arXiv
     Why: Research track for PHD
     Reward: stay in TW and good distinction 
-3) Work on features file now
-    - Improving contract and prompting of it
-    - Verify that the file is actually processing the data correctly + Print bar and check
-    Why: Need correct data to be sure works, but I think this should be addressed with the Test Suite
-    Reward: Pass to next phase and trade :)
-    - Add runtime chain and dependecy graph, also summary of functions must contain input
-    Why: I get lost in the code most of the time, I get that feeling
-    Reward: Easy mental state rebuilding
-    - Understand upstream and Downstream
-    Why: I get lost in the explanations of the jargon
-    Reward: code very fast and efficient with agents
-4) FINISH EXAMPLE OF FAILURE MODE AND ACCEPTANCE CRITERIA + ASSUMPTIONS / GUARANTEES
-    Why: I need one clear example to follow
-    Reward: Not feeling lost, Finally find productivity with LLM and BUILD FAST what I want
+3) Understand if learning Jobs in linux is helpful
 
