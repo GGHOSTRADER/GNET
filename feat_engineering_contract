@@ -1,8 +1,4 @@
-*COMMENT: MUST INCLUDE CONTENT OF PRE MADE FUNCTIONS AND CLASSES
-
 Feature Engineering Contract
-
-
 
 BarIngestionWindow (Done once before any feature calculations):
 Steps
@@ -129,5 +125,7 @@ modSlope5
 	Data casted and validated by Upstream BarWindow Contract , 
 	High, low and Close they all been revised. 
 - Data dependency: Upstream BarWindow / Bar ingestion
+
+
 
 

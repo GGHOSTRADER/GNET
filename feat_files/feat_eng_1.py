@@ -22,7 +22,7 @@ Layering
 
 Contract compliance
 -------------------
-Global (done before any feature calcs):
+Bar consuer / caster (done before any feature calcs):
 1) Connect to redis using get_redis_connection from netwo_files.redis_tool.py
    REQUIRED signature used here:
      r = get_redis_connection(REDIS1_HOST, REDIS1_PORT, REDIS1_STREAM_NAME)
@@ -43,10 +43,6 @@ Internal(per feature):
 
 Important reality check
 -----------------------
-Your parse_xread_to_bars() returns XReadBatch(bars=..., last_ids=...).
-It does NOT return entries/fields. Therefore:
-- The only place to validate "len(fields)==11" is on the RAW xread output
-  (before calling parse_xread_to_bars). This module does that.
 
 If any import names differ in your repo, fix ONLY the imports, not the logic.
 """

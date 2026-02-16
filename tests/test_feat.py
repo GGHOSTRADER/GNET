@@ -10,14 +10,14 @@ No Redis, no I/O, uses local test doubles only.
 Test Inventory (enumerated, 5-word summaries)
 ---------------------------------------------
 T01 - Valid window returns float
-T02 - Fixture returns expected value
+T02 - Fixture returns expected va lue
 T03 - Bad length raises E_LEN
 T04 - Bad continuity raises E_GAP
 T05 - Deterministic and no mutation
 
 Notes
 -----
-- Imports and symbol resolution are setup, not tests.
+- Imports are setup, not tests.
 - Tests assert contract-style error codes (E_LEN, E_GAP).
 - Documentation only; execution logic unchanged.
 """
@@ -25,31 +25,13 @@ Notes
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
-import importlib
-
 import pytest
 
-
 # ============================================================
-# Setup (not tests): import + symbol resolution
+# Setup (not tests): stable, static imports
 # ============================================================
 
-fe1 = importlib.import_module("feat_eng_1")
-
-_FUNC_CANDIDATES = ["modSlope5", "mod_slope5", "modslope5", "ModSlope5"]
-modSlope5: Callable[[Sequence[Any]], float] | None = None
-for name in _FUNC_CANDIDATES:
-    if hasattr(fe1, name):
-        modSlope5 = getattr(fe1, name)
-        break
-
-if modSlope5 is None:
-    raise AttributeError(
-        "feat_eng_1.py does not expose modSlope5. " f"Tried: {_FUNC_CANDIDATES}."
-    )
-
-FeatureErr = getattr(fe1, "FeatureContractError", Exception)
+from feat_files.feat_eng_1 import modSlope5, FeatureContractError as FeatureErr
 
 
 # ============================================================

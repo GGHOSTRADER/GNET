@@ -92,9 +92,12 @@ Work per session:
     2) The acceptance criteria is more about the actual tests, positive vs negative
     3) I am finishing the correct mapping of the three categories
     4) Must test the new contract,  was looking at deque
-15 of deb 2026
+15 of feb 2026
     1) Finished contract and understanding of type of graphs, now need to implement it
     2) Tested the contrasct with invariants, failure mode and acceptance criteria, seems to work very well
+16 of Feb 2026
+    1) Found mermaid for flow, very usefull
+    2) Working with how to understand the codes much faster
 
 To do:
 ----
