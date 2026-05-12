@@ -1,0 +1,4 @@
+redis>=7.0.0
+
+# dev / testing only
+pytest>=7.0.0

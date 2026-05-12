@@ -1,0 +1,69 @@
+HOW TO RUN THE PIPELINE
+========================
+
+Run these steps IN ORDER, each in its own PowerShell terminal.
+
+
+STEP 1 - Start Redis (Docker)
+------------------------------
+docker run -d --name redis1 -p 6381:6379 redis
+
+    -d              runs the container in the background
+    --name redis1   gives it a name so you can manage it later
+    -p 6381:6379    maps Windows port 6381 to the container's Redis port 6379
+    redis           official Redis image (auto-downloaded on first run)
+
+After first run, next time just do:
+    docker start redis1
+
+To stop it:
+    docker stop redis1
+
+To check it is running:
+    docker ps
+
+
+STEP 2 - Start the Python TCP Server
+--------------------------------------
+From the project root (C:\Users\g_med\python_new\GNET):
+
+    python -m netwo_files.tcp_to_redis_connection
+
+You should see:
+    1) [bar_server] Connected to Redis1
+       -Host: 127.0.0.1
+       -Port: 6381
+       -Stream Name: bars_raw
+
+    2) [bar_server] Listening TCP
+       -Host: 127.0.0.1
+       -Port: 9009
+
+The server is now waiting for TradeStation to connect.
+
+
+STEP 3 - Activate the Strategy in TradeStation
+------------------------------------------------
+Load the EasyLanguage strategy from EL_files/el_dll.txt into TradeStation.
+Make sure the DllPath input points to your compiled BarBridge.dll.
+
+On each bar close, TradeStation calls SendBar() through the DLL,
+which sends a CSV line to 127.0.0.1:9009.
+The Python server parses it, validates it, and writes it to Redis stream "bars_raw".
+
+
+STEP 4 (Optional) - Run the Feature Pipeline
+----------------------------------------------
+    python -m transformer_features
+
+or
+
+    python -m feat_files.feat_eng_1
+
+These read from Redis stream "bars_raw" and emit feature points.
+
+
+PORTS USED
+----------
+    9009  - TCP server (Python listener, TradeStation connects here via DLL)
+    6381  - Redis (Docker container, mapped from internal 6379)

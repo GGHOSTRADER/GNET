@@ -1,0 +1,58 @@
+flowchart TD
+    TS([TradeStation - EasyLanguage])
+    DLL["BarBridge.dll - C++ Win32 - SendBar() - connects to 127.0.0.1:9009"]
+    TCP_SOCK["TCP Socket - tcp_to_redis_connection.py"]
+    BUF["Line Buffer - buf += data - split on newline"]
+    PARSE["parse_csv_line(line) - bar_codec.py"]
+    VAL_BAR["validate_bar(b) - bar_contract.py"]
+    VAL_SEQ["validate_sequence(prev, curr) - bar_contract.py"]
+    ENCODE["bar_to_redis_fields(bar) - bar_codec.py"]
+    REDIS_CONN["get_redis_connection() - redis_tool.py"]
+    DOCKER["Docker Container - redis - port 6381:6379"]
+    REDIS[("Redis Stream - bars_raw")]
+    DROP["Drop + Log - DecodeError / ContractError"]
+
+    XREAD["redis_client.xread()"]
+    UNWRAP["parse_xread_to_bars() - bar_codec.py - iterates over every entry"]
+    FIELDS["bar_from_redis_fields(fields) - bar_codec.py - called once per entry"]
+    BATCH["XReadBatch - bars: list[Bar] - last_ids: dict"]
+    CONSUMER([Downstream Consumer])
+
+    TS -->|"SendBar() call on bar close"| DLL
+    DLL -->|"CSV bytes over TCP - port 9009"| TCP_SOCK
+    DOCKER -->|"hosts Redis on 127.0.0.1:6381"| REDIS
+    REDIS_CONN -->|"r (Redis client)"| TCP_SOCK
+    TCP_SOCK --> BUF
+    BUF -->|"raw CSV line"| PARSE
+    PARSE -->|"typed Bar"| VAL_BAR
+    VAL_BAR -->|"pass"| VAL_SEQ
+    VAL_BAR -->|"fail"| DROP
+    VAL_SEQ -->|"pass"| ENCODE
+    VAL_SEQ -->|"fail"| DROP
+    ENCODE -->|"canonical string fields"| REDIS
+
+    REDIS -->|"XREAD payload"| XREAD
+    XREAD -->|"nested list of all entries"| UNWRAP
+    BATCH --> CONSUMER
+
+    subgraph LOOP ["LOOP - for each entry in XREAD result"]
+        UNWRAP -->|"one field map per entry"| FIELDS
+        FIELDS -->|"typed Bar - appended to list"| BATCH
+        UNWRAP -->|"after all entries done"| BATCH
+    end
+
+    subgraph bar_contract.py
+        VAL_BAR
+        VAL_SEQ
+    end
+
+    subgraph bar_codec.py
+        PARSE
+        ENCODE
+        UNWRAP
+        FIELDS
+    end
+
+    subgraph redis_tool.py
+        REDIS_CONN
+    end
