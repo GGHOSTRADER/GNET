@@ -160,6 +160,22 @@ redis.Redis(unix_socket_path="/tmp/redis1.sock")
 
 ---
 
+### Tick Batching Before Redis Write
+
+Currently `tick_validator.py` does one `xadd` per tick — 400 GIL lock/unlock cycles per second on the open. An alternative is to accumulate a small batch of validated ticks in a Python list and flush them to Redis in a single **pipeline** call:
+
+```python
+# instead of one xadd per tick:
+pipe = r.pipeline(transaction=False)
+for tick in validated_batch:
+    pipe.xadd(REDIS1_TICK_VALIDATED_STREAM, tick_to_redis_fields(tick), maxlen=50_000, approximate=True)
+pipe.execute()  # one round trip, one GIL lock for the whole batch
+```
+
+**Trade-off:** batching introduces a small latency — ticks are held in memory until the batch is full or a timeout fires. For a 10-tick batch at 400 ticks/s, the extra delay is ~25ms. Acceptable for volume profile (stateful, doesn't care about per-tick freshness) but would matter for any consumer that needs tick-level real-time response.
+
+**When to apply:** if GIL contention in the validator becomes measurable — i.e. the validator falls behind the raw stream during fast markets. At current volumes (400 ticks/s) it is not necessary.
+
 ---
 
 ## Quick Command Reference

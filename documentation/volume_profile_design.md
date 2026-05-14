@@ -30,19 +30,19 @@ Grid extension only happens if price breaks outside the pre-allocated range. Ext
 
 ## Inputs
 
-**Source:** Redis Stream `validated_bar` — `127.0.0.1:6381`
-**Parser:** `parse_xread_to_bars()` from `netwo_files/bar_codec.py` (decode + cast only)
+**Source:** Redis Stream `tick_data_validated` — `127.0.0.1:6381`
+**Parser:** `parse_xread_to_ticks()` from `netwo_files/tick_codec.py` (decode + cast only)
 
-### From each Bar
+### From each Tick
 
 | Field | Type | Description |
 |---|---|---|
-| `bar.close` | float | Price where volume is assigned (single price per bar) |
-| `bar.up` | int | Market buy volume |
-| `bar.down` | int | Market sell volume |
-| `bar.symbol` | str | Ticker symbol |
-| `bar.date` | int | Session date (YYYMMDD, years since 1900) |
-| `bar.bar_num` | int | Bar sequence number |
+| `tick.high` | float | Price (high == low for tick data — single price point) |
+| `tick.up` | int | Market buy volume at this tick |
+| `tick.down` | int | Market sell volume at this tick |
+| `tick.symbol` | str | Ticker symbol |
+| `tick.date` | int | Session date (YYYYMMDD) |
+| `tick.bar_num` | int | Tick sequence number |
 
 ### Launch Parameters
 
@@ -86,17 +86,31 @@ Emitted once per bar.
 
 ---
 
+## What Is Stateful
+
+`_SessionState` is the single live object that accumulates data across all ticks in a trading session. It is created once per day by `_init_session` and mutated in-place by every `_update` call.
+
+| Field | Type | Stateful? | Description |
+|---|---|---|---|
+| `profile` | `ndarray (L,)` | **Yes** | The core accumulator. `profile[i]` holds total volume traded at `price_levels[i]` so far this session. Grows via `np.concatenate` only on boundary break. |
+| `min_price` | `float` | **Yes** | Price corresponding to index 0. Shifts down when grid extends below floor. |
+| `tick_size` | `float` | No | Fixed at session init. |
+| `range_ticks` | `int` | No | Fixed at session init. Used to compute 15% extension size. |
+| `symbol` | `str` | No | Set at init from first tick. |
+| `date` | `int` | No | Set at init. Session resets when this changes. |
+| `bar_num` | `int` | **Yes** | Updated to the latest tick's bar_num on every `_update`. |
+| `n_bars` | `int` | **Yes** | Incremented by 1 on every `_update`. |
+| `extensions` | `int` | **Yes** | Incremented each time the grid is extended. |
+
+**What is NOT in state:** POC and Value Area are not stored. They are derived fresh on every `_snapshot` call directly from `profile` using `np.argmax` and `np.argsort`. The full `profile` array is the only source of truth — POC and VA are read-only views computed on demand.
+
+**Lifetime:** state lives in Python heap for the duration of the session. No disk persistence. On date change `stream_volume_profile` replaces the old `_SessionState` with a fresh one — previous session data is discarded.
+
+---
+
 ## Storage
 
 All state held in memory in `_SessionState`. No persistence. Reset on date change.
-
-| Field | Type | Description |
-|---|---|---|
-| `profile` | ndarray | Live profile array (pre-allocated) |
-| `min_price` | float | Price corresponding to index 0 |
-| `tick_size` | float | Price increment |
-| `range_ticks` | int | Original range for extension calculation |
-| `extensions` | int | Extension count |
 
 ---
 

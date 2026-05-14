@@ -10,6 +10,15 @@ DO NOT validate, parse, or cast here.
 Drain the kernel buffer as fast as possible and push raw lines to Redis.
 All validation happens downstream in tick_validator.py.
 
+GIL note
+--------
+The Python GIL is held during r.xadd() — redis-py is pure Python and does
+not release the GIL on socket writes. This means the recv loop is blocked
+for the duration of each xadd call (~50µs on TCP loopback). At 400 ticks/s
+this adds up to ~20ms/s of GIL contention. Acceptable at current volumes,
+but a hard ceiling if tick rate grows significantly. The SO_RCVBUF=1MB
+buffer absorbs bursts that arrive while the GIL is held by xadd.
+
 Flow
 ----
 TradeStation -> TickBridge.dll -> TCP port 9010 -> this server -> Redis tick_data_raw
