@@ -1,3 +1,14 @@
+"""
+redis_tool.py
+=============
+
+Shared Redis connection helper used by all pipeline scripts.
+
+Function Summary
+----------------
+1) get_redis_connection(host, port, stream_name, decode_respon)
+   -- creates a Redis client, pings to confirm connection, prints status, returns client
+"""
 import redis
 
 

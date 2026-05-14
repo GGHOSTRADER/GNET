@@ -1,0 +1,25 @@
+flowchart TD
+
+    TS([TradeStation])
+
+    TS -->|"bar close"| BAR_DLL["BarBridge.dll - port 9009"]
+    TS -->|"every tick"| TICK_DLL["TickBridge.dll - port 9010"]
+
+    BAR_DLL -->|"CSV"| BAR_SERVER["tcp_to_redis_connection.py - parse - validate - encode"]
+    TICK_DLL -->|"CSV"| TICK_SERVER["tcp_to_redis_ticks.py - raw passthrough only"]
+
+    BAR_SERVER -->|"validated_bar"| REDIS[("Redis - Docker port 6381 - streams: validated_bar - tick_data_raw - tick_data_validated - features_transformer - features_volume_profile")]
+    TICK_SERVER -->|"tick_data_raw"| REDIS
+
+    REDIS -->|"tick_data_raw"| VALIDATOR["tick_validator.py - cast - validate"]
+    VALIDATOR -->|"tick_data_validated"| REDIS
+
+    REDIS -->|"validated_bar"| FE1["feat_eng_1.py - modSlope5"]
+    REDIS -->|"validated_bar"| TF["transformer_features.py - 8 features"]
+    REDIS -->|"tick_data_validated"| VP["volume_profile.py - POC - Value Area"]
+
+    TF -->|"features_transformer"| REDIS
+    VP -->|"features_volume_profile"| REDIS
+
+    REDIS -->|"features_transformer - bottleneck"| CONSOLIDATOR["consolidator.py - waits for TF - grabs latest VP - validates symbol match - prints merged features"]
+    REDIS -->|"features_volume_profile - latest"| CONSOLIDATOR

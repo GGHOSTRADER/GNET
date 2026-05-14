@@ -43,6 +43,24 @@ Window requirements
   volume_momentum   : 6 bars   (current + 5 ago)
   amihud            : 2 bars   (current + prev close)
 
+Function Summary
+----------------
+1)  FeatureContractError             -- raised when a feature-level invariant is violated
+2)  _require_feature(cond, msg)      -- validation guard for feature invariants
+3)  _parkinson_vol(bars, window)     -- pure: sqrt(mean(ln(H/L)^2) / (4*ln2)) over window bars
+4)  _ofi(bars, window)               -- pure: rolling sum of (up - down) over window bars
+5)  _volume_percentile(bars, window) -- pure: rank of current volume in window bars (0-1)
+6)  _volume_momentum(bars, n)        -- pure: (vol_now - vol_n_ago) / vol_n_ago
+7)  _amihud_illiquidity(bars)        -- pure: |log(close/prev_close)| / volume
+8)  _atr(bars, period)               -- pure: average true range over period bars
+9)  _vwap_distance(bar, atr)         -- pure: (close - vwap) / ATR
+10) _minutes_since_open(bar)         -- pure: (time_s - 34200) / 60
+11) _is_first_last_30min(bar)        -- pure: 1 if in first or last 30 min of session
+12) FeaturePoint                     -- frozen dataclass: all 16 feature fields + metadata
+13) stream_bars_from_redis(...)      -- adapter: reads validated_bar stream, yields typed Bars
+14) stream_feature_points(...)       -- application: 60-bar rolling window, yields FeaturePoint
+15) run_print_loop()                 -- smoke runner: prints all features per bar
+
 Contract compliance
 -------------------
 1) Connect to Redis using get_redis_connection from netwo_files.redis_tool
@@ -56,138 +74,30 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Deque, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Deque, Iterator, Sequence
 
-from config.setting import REDIS1_HOST, REDIS1_PORT, REDIS1_STREAM_NAME
-from netwo_files.redis_tool import get_redis_connection
-from netwo_files.bar_codec import (
-    parse_xread_to_bars,
-    XReadBatch,
-    XReadShapeError,
-    DecodeError,
+from config.setting import (
+    REDIS1_HOST, REDIS1_PORT, REDIS1_STREAM_NAME,
+    REDIS1_FEATURES_TRANSFORMER_STREAM,
 )
+from netwo_files.redis_tool import get_redis_connection
+from netwo_files.bar_codec import parse_xread_to_bars
 
 # ============================================================
 # Errors
 # ============================================================
 
 _OPEN_S = 9 * 3600 + 30 * 60   # 09:30:00 in seconds since midnight = 34200
-_CLOSE_S = 16 * 3600            # 16:00:00 = 57600
 _WINDOW = 60                    # largest rolling window (volume_percentile)
-
-
-class GlobalContractError(ValueError):
-    """Raised when a global invariant (bar validity / continuity) is violated."""
 
 
 class FeatureContractError(ValueError):
     """Raised when a feature-level invariant is violated."""
 
 
-def _require(cond: bool, msg: str) -> None:
-    if not cond:
-        raise GlobalContractError(msg)
-
-
 def _require_feature(cond: bool, msg: str) -> None:
     if not cond:
         raise FeatureContractError(msg)
-
-
-# ============================================================
-# RAW XREAD shape helpers (live test #1: len(fields) == 11)
-# ============================================================
-
-
-def iter_raw_xread_entries(
-    xread_result: Any,
-) -> Iterator[Tuple[str, Mapping[Any, Any]]]:
-    """Yield (entry_id, fields_mapping) from raw redis-py XREAD output."""
-    if xread_result is None:
-        return
-
-    _require(
-        isinstance(xread_result, list),
-        f"XREAD result must be list, got {type(xread_result).__name__}",
-    )
-
-    for i, stream_block in enumerate(xread_result):
-        _require(
-            isinstance(stream_block, (tuple, list)) and len(stream_block) == 2,
-            f"XREAD item[{i}] must be (stream, entries)",
-        )
-        _raw_stream, entries = stream_block
-        _require(isinstance(entries, list), f"XREAD entries item[{i}] must be list")
-
-        for j, entry in enumerate(entries):
-            _require(
-                isinstance(entry, (tuple, list)) and len(entry) == 2,
-                f"XREAD entry[{i}][{j}] must be (id, fields)",
-            )
-            entry_id, fields = entry
-            _require(
-                isinstance(fields, Mapping),
-                f"XREAD fields for entry[{i}][{j}] must be Mapping",
-            )
-            yield (str(entry_id), fields)
-
-
-def validate_xread_field_count(raw_len: int) -> None:
-    _require(raw_len == 11, f"Expected 11 fields per bar, got {raw_len}.")
-
-
-# ============================================================
-# Typed bar invariants (live tests #2.x)
-# ============================================================
-
-
-def validate_bar_fields(b: Any) -> None:
-    _require(b.symbol is not None, "symbol is null")
-    _require(isinstance(b.symbol, str), f"symbol must be str, got {type(b.symbol).__name__}")
-    _require(b.symbol != "", "symbol is empty")
-
-    _require(isinstance(b.date, int), f"date must be int, got {type(b.date).__name__}")
-    _require(b.date > 1260000, f"date must be > 1260000, got {b.date}")
-    mmdd = b.date % 10000
-    _require(1 <= mmdd // 100 <= 12, f"month out of range from date={b.date}")
-    _require(1 <= mmdd % 100 <= 31, f"day out of range from date={b.date}")
-
-    _require(isinstance(b.time_s, int), f"time_s must be int, got {type(b.time_s).__name__}")
-    _require(0 <= b.time_s < 86400, f"time_s out of range: {b.time_s}")
-
-    _require(isinstance(b.open, float), f"open must be float, got {type(b.open).__name__}")
-    _require(b.open > 0.0, f"open must be > 0, got {b.open}")
-
-    _require(isinstance(b.high, float), f"high must be float, got {type(b.high).__name__}")
-    _require(b.high > 0.0, f"high must be > 0, got {b.high}")
-    _require(b.open <= b.high, f"open={b.open} > high={b.high}")
-
-    _require(isinstance(b.low, float), f"low must be float, got {type(b.low).__name__}")
-    _require(b.low > 0.0, f"low must be > 0, got {b.low}")
-    _require(b.open >= b.low, f"open={b.open} < low={b.low}")
-
-    _require(isinstance(b.close, float), f"close must be float, got {type(b.close).__name__}")
-    _require(b.close > 0.0, f"close must be > 0, got {b.close}")
-    _require(b.low <= b.close <= b.high, f"close={b.close} not in [low={b.low}, high={b.high}]")
-
-    _require(isinstance(b.up, int), f"up must be int, got {type(b.up).__name__}")
-    _require(b.up >= 0, f"up must be >= 0, got {b.up}")
-
-    _require(isinstance(b.down, int), f"down must be int, got {type(b.down).__name__}")
-    _require(b.down >= 0, f"down must be >= 0, got {b.down}")
-
-    _require(isinstance(b.vwap, float), f"vwap must be float, got {type(b.vwap).__name__}")
-    _require(b.vwap >= 0.0, f"vwap must be >= 0, got {b.vwap}")
-
-    _require(isinstance(b.bar_num, int), f"bar_num must be int, got {type(b.bar_num).__name__}")
-    _require(b.bar_num >= 0, f"bar_num must be >= 0, got {b.bar_num}")
-
-
-def validate_bar_continuity(prev: Any, curr: Any) -> None:
-    _require(
-        curr.bar_num - prev.bar_num == 1,
-        f"bar continuity broken: prev={prev.bar_num}, curr={curr.bar_num}",
-    )
 
 
 # ============================================================
@@ -335,51 +245,19 @@ def stream_bars_from_redis(
     start_id: str = "$",
 ) -> Iterator[Any]:
     """
-    Infrastructure adapter (mirrors feat_eng_1.py):
-    - Connect to Redis1
-    - xread with blocking
-    - Validate raw field count == 11 (live test #1)
-    - Parse with parse_xread_to_bars (pure)
-    - Validate typed Bar invariants + bar_num continuity
-    - Yield typed Bars
+    Reads validated bars from Redis1. Data is already validated at ingestion
+    (tcp_to_redis_connection.py + bar_codec.py), so we just read and cast.
     """
     r = get_redis_connection(REDIS1_HOST, REDIS1_PORT, REDIS1_STREAM_NAME)
-
     last_id = start_id
-    last_bar: Optional[Any] = None
 
     while True:
-        xread_result = r.xread(
-            {REDIS1_STREAM_NAME: last_id},
-            count=count,
-            block=block_ms,
-        )
-
-        for _entry_id, fields in iter_raw_xread_entries(xread_result):
-            validate_xread_field_count(len(fields))
-
-        try:
-            batch: XReadBatch = parse_xread_to_bars(xread_result)
-        except (XReadShapeError, DecodeError):
-            raise
-
+        xread_result = r.xread({REDIS1_STREAM_NAME: last_id}, count=count, block=block_ms)
+        batch = parse_xread_to_bars(xread_result)
         if not batch.bars:
             continue
-
-        last_id = batch.last_ids.get(REDIS1_STREAM_NAME)
-        _require(
-            last_id is not None,
-            f"Missing last_id for stream '{REDIS1_STREAM_NAME}' in batch.last_ids",
-        )
-
-        for bar in batch.bars:
-            validate_bar_fields(bar)
-
-            if last_bar is not None:
-                validate_bar_continuity(last_bar, bar)
-
-            last_bar = bar
-            yield bar
+        last_id = batch.last_ids[REDIS1_STREAM_NAME]
+        yield from batch.bars
 
 
 # ============================================================
@@ -400,12 +278,16 @@ def stream_feature_points(
     - Emit FeaturePoint once window is full
     """
     window: Deque[Any] = deque(maxlen=_WINDOW)
+    warmed_up = False
 
     for bar in stream_bars_from_redis(block_ms=block_ms, count=count, start_id=start_id):
         window.append(bar)
 
-        if len(window) < _WINDOW:
-            continue
+        if not warmed_up:
+            if len(window) < _WINDOW:
+                print(f"[warming up] {len(window)}/{_WINDOW} bars")
+                continue
+            warmed_up = True
 
         bars = list(window)
         atr = _atr(bars, period=14)
@@ -435,16 +317,52 @@ def stream_feature_points(
 # ============================================================
 
 
-def run_print_loop() -> None:
+def _feature_point_to_redis_fields(fp: FeaturePoint) -> dict:
+    """Encode a FeaturePoint into canonical string fields for Redis xadd."""
+    return {
+        "symbol":           fp.symbol,
+        "date":             str(fp.date),
+        "time_s":           str(fp.time_s),
+        "bar_num":          str(fp.bar_num),
+        "parkinson_vol_5":  repr(fp.parkinson_vol_5),
+        "parkinson_vol_15": repr(fp.parkinson_vol_15),
+        "parkinson_vol_30": repr(fp.parkinson_vol_30),
+        "ofi_5":            repr(fp.ofi_5),
+        "ofi_15":           repr(fp.ofi_15),
+        "ofi_30":           repr(fp.ofi_30),
+        "volume_percentile": repr(fp.volume_percentile),
+        "volume_momentum":  repr(fp.volume_momentum),
+        "amihud_illiquidity": repr(fp.amihud_illiquidity),
+        "vwap_distance":    repr(fp.vwap_distance),
+        "minutes_since_open": repr(fp.minutes_since_open),
+        "is_first_last_30min": str(fp.is_first_last_30min),
+    }
+
+
+def run_publish_loop() -> None:
+    """
+    Main loop: compute features and push each FeaturePoint to Redis.
+    Writes to stream: features_transformer
+    Also prints to stdout for monitoring.
+    """
+    r = get_redis_connection(REDIS1_HOST, REDIS1_PORT, REDIS1_FEATURES_TRANSFORMER_STREAM)
+
     for fp in stream_feature_points():
+        r.xadd(
+            REDIS1_FEATURES_TRANSFORMER_STREAM,
+            _feature_point_to_redis_fields(fp),
+            maxlen=1_000,
+            approximate=True,
+        )
         print(
             f"{fp.symbol} date={fp.date} t={fp.time_s} bar={fp.bar_num} "
-            f"pvol5={fp.parkinson_vol_5:.6f} ofi5={fp.ofi_5:.0f} "
-            f"vol_pct={fp.volume_percentile:.3f} amihud={fp.amihud_illiquidity:.8f} "
-            f"vwap_d={fp.vwap_distance:.4f} min_open={fp.minutes_since_open:.1f} "
-            f"sess_flag={fp.is_first_last_30min}"
+            f"pvol5={fp.parkinson_vol_5:.6f} pvol15={fp.parkinson_vol_15:.6f} pvol30={fp.parkinson_vol_30:.6f} "
+            f"ofi5={fp.ofi_5:.0f} ofi15={fp.ofi_15:.0f} ofi30={fp.ofi_30:.0f} "
+            f"vol_pct={fp.volume_percentile:.3f} vol_mom={fp.volume_momentum:.4f} "
+            f"amihud={fp.amihud_illiquidity:.8f} vwap_d={fp.vwap_distance:.4f} "
+            f"min_open={fp.minutes_since_open:.1f} sess_flag={fp.is_first_last_30min}"
         )
 
 
 if __name__ == "__main__":
-    run_print_loop()
+    run_publish_loop()

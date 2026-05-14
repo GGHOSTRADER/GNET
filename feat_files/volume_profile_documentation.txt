@@ -1,0 +1,161 @@
+VOLUME PROFILE PIPELINE - DOCUMENTATION
+========================================
+File: feat_files/volume_profile.py
+Run:  python -m feat_files.volume_profile
+
+
+WHAT IT DOES
+------------
+Reads bar data from Redis1 in real time and maintains a stateful Volume Profile
+for the current trading session. On every bar close it emits an updated snapshot.
+
+Data arriving from Redis is already validated at ingestion
+(tcp_to_redis_connection.py + bar_codec.py). This file just reads and casts.
+
+Session resets automatically when date changes (new trading day).
+
+
+DESIGN: STATEFUL INCREMENTAL PROFILE
+--------------------------------------
+Grid is pre-allocated at session start (range_ticks + 1 zeros) centered on the
+first bar's close. Each subsequent bar does a single:
+
+    profile[index] += volume   (one C op, no rebuild ever)
+
+Grid extension only happens if price breaks outside the pre-allocated range.
+Extension adds 15% of range_ticks in the direction of the break via
+np.concatenate. On a typical session with 400 ticks pre-allocated this almost
+never fires. Even on trend days the 15% buffer absorbs most moves.
+
+
+INPUTS
+------
+Source: Redis Stream "validated_bar" (127.0.0.1:6381)
+Parser: parse_xread_to_bars() from netwo_files/bar_codec.py (decode + cast only)
+
+From each Bar:
+  bar.close    float  -- price where volume is assigned (single price per bar)
+  bar.up       int    -- market buy volume
+  bar.down     int    -- market sell volume
+  bar.symbol   str    -- ticker symbol
+  bar.date     int    -- session date (YYYMMDD, years since 1900)
+  bar.bar_num  int    -- bar sequence number
+
+Launch Parameters:
+  tick_size    float  -- price increment per level
+                         e.g. 0.25 for ES futures (default: 0.25)
+  range_ticks  int    -- number of ticks to pre-allocate at session start
+                         e.g. 400 ticks @ 0.25 = ±50 points around open
+                         (default: 400)
+
+Example:
+  stream_volume_profile(tick_size=0.25, range_ticks=600)
+
+
+OUTPUTS (VolumeProfileResult)
+------------------------------
+Emitted once per bar.
+
+  symbol           str            -- ticker symbol
+  date             int            -- session date
+  bar_num          int            -- latest bar number
+  tick_size        float          -- price grid resolution used
+  range_ticks      int            -- initial pre-allocated ticks
+  price_levels     np.ndarray(L)  -- tick-spaced price grid
+  volume_at_level  np.ndarray(L)  -- volume at each level (parallel to price_levels)
+  poc_price        float          -- Point of Control: price level with most volume
+  poc_volume       float          -- volume at the POC level
+  value_area_low   float          -- VAL: lower bound of 70% value area
+  value_area_high  float          -- VAH: upper bound of 70% value area
+  total_volume     float          -- total session volume so far
+  n_bars           int            -- bars accumulated this session
+  extensions       int            -- how many times the grid was extended this session
+
+
+STORAGE
+-------
+All state held in memory in _SessionState. No persistence.
+Reset on date change.
+
+  _SessionState.profile     np.ndarray  -- the live profile array (pre-allocated)
+  _SessionState.min_price   float       -- price corresponding to index 0
+  _SessionState.tick_size   float
+  _SessionState.range_ticks int         -- original range for extension calculation
+  _SessionState.extensions  int         -- extension count
+
+
+GRID EXTENSION RULES
+---------------------
+Extension triggered when bar.close falls outside the current grid.
+
+  extension_ticks = max(1, int(range_ticks * 0.15))
+                  = max(1, int(400 * 0.15))
+                  = 60 ticks (default)
+
+  Broke below floor: prepend zeros, min_price shifts down by n_add * tick_size
+  Broke above ceiling: append zeros
+
+  n_add = max(extension_ticks, gap_in_ticks)
+  (guarantees the new bar always fits even if jump > extension_ticks)
+
+Example with range_ticks=400, tick_size=0.25:
+  Initial grid:  4950.00 to 5050.00  (400 ticks = 100 price points)
+  Price breaks above 5050.00:
+    extension = 60 ticks = 15.00 price points
+    New ceiling: 5065.00
+
+
+FUNCTION SUMMARY
+----------------
+
+INFRASTRUCTURE / ADAPTER
+--------------------------
+stream_bars_from_redis(block_ms, count, start_id)
+  Connects to Redis1, blocking XREAD loop, parses via parse_xread_to_bars().
+  No re-validation. Yields one typed Bar at a time.
+
+
+DOMAIN (Pure - stateful profile)
+----------------------------------
+_find_poc(profile, price_levels) -> (poc_price, poc_volume)
+  np.argmax on profile array.
+
+_find_value_area(profile, price_levels, pct=0.70) -> (val, vah)
+  np.argsort + np.cumsum. Selects levels by volume descending until 70%
+  of total volume is covered. VAL/VAH = min/max price of selected levels.
+
+
+SESSION STATE
+--------------
+_init_session(bar, tick_size, range_ticks) -> _SessionState
+  Pre-allocates profile array of range_ticks+1 zeros centered on first close.
+  Called once per session (on first bar or date change).
+
+_update(state, bar) -> None
+  Incremental update. O(1) in common case:
+    1. Snap close to nearest tick
+    2. Compute integer index
+    3. If within grid: profile[index] += volume
+    4. If outside grid: extend via np.concatenate, then add volume
+
+_snapshot(state) -> VolumeProfileResult
+  Derives price_levels from min_price + np.arange * tick_size.
+  Calls _find_poc and _find_value_area.
+  Returns a copy of the profile (safe for downstream use).
+
+
+APPLICATION
+------------
+stream_volume_profile(tick_size, range_ticks, block_ms, count, start_id)
+  Main generator. Manages session lifecycle, calls _init_session on new day,
+  calls _update + _snapshot on every bar.
+
+run_print_loop(tick_size, range_ticks)
+  Smoke runner. Prints one line per bar including grid size and extension count.
+
+
+PORTS / DEPENDENCIES
+---------------------
+  Redis:  127.0.0.1:6381  (Docker container)
+  Stream: validated_bar
+  Deps:   redis, numpy

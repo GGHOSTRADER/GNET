@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------------
 # TS -- > TCP  ---> Redis Stream
 # A TCP server that listens for incoming bar data in CSV format From Tradestation
-# Each line received is parsed and appended to a Redis Stream named "bars_raw"
+# Each line received is parsed and appended to a Redis Stream named "validated_bar"
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # TO RUN AS A MODULE INSTEAD OF A SCRIPT (for better imports):

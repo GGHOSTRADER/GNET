@@ -1,0 +1,66 @@
+flowchart TD
+
+    TS([TradeStation - EasyLanguage])
+    DLL["TickBridge.dll - C++ Win32 - SendTick()"]
+    TCP_SOCK["TCP Socket - port 9010 - tcp_to_redis_ticks.py"]
+    BUF["Line Buffer - split on newline"]
+    XADD["r.xadd - field: raw_tick - NO parsing - NO validation"]
+    REDIS_RAW[("Redis Stream - tick_data_raw")]
+
+    XREAD["r.xread - block=100ms - count=500 - tick_validator.py"]
+    EXTRACT["parse_xread_raw_ticks - tick_codec.py - extract raw_tick field"]
+    CAST["parse_raw_tick_line - tick_codec.py - cast str to int and float"]
+    VAL_TICK["validate_tick - tick_contract.py - enforce invariants - high == low"]
+    VAL_SEQ["validate_tick_sequence - tick_contract.py - enforce bar_num monotonicity"]
+    ENCODE["tick_to_redis_fields - tick_codec.py - encode typed Tick to strings"]
+    REDIS_CLEAN[("Redis Stream - tick_data_validated")]
+    DROP["Drop and Log - TickDecodeError or TickContractError"]
+
+    VP_READ["stream_ticks_from_redis - volume_profile.py - xread tick_data_validated"]
+    VP_UPDATE["_update - O(1) profile update - profile[index] += volume"]
+    VP_SNAP["_snapshot - POC + Value Area - numpy argmax + argsort"]
+    REDIS_VP[("Redis Stream - features_volume_profile - maxlen 50000")]
+
+    TS -->|"1 - SEND on every tick"| DLL
+    DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
+    TCP_SOCK -->|"3 - READ from kernel buffer"| BUF
+    BUF -->|"4 - EXTRACT one line at a time"| XADD
+    XADD -->|"5 - PUSH raw line - no processing"| REDIS_RAW
+
+    REDIS_RAW -->|"6 - XREAD raw stream"| XREAD
+    XREAD -->|"7 - UNWRAP XREAD structure"| EXTRACT
+    EXTRACT -->|"8 - raw CSV line"| CAST
+    CAST -->|"9 - typed Tick - pass"| VAL_TICK
+    CAST -->|"fail"| DROP
+    VAL_TICK -->|"10 - pass"| VAL_SEQ
+    VAL_TICK -->|"fail"| DROP
+    VAL_SEQ -->|"11 - pass"| ENCODE
+    VAL_SEQ -->|"fail"| DROP
+    ENCODE -->|"12 - PUSH clean tick"| REDIS_CLEAN
+
+    REDIS_CLEAN -->|"13 - XREAD validated ticks"| VP_READ
+    VP_READ -->|"14 - typed Tick"| VP_UPDATE
+    VP_UPDATE -->|"15 - updated state"| VP_SNAP
+    VP_SNAP -->|"16 - PUSH POC + VA scalars"| REDIS_VP
+
+    subgraph INGEST ["Ingest - tcp_to_redis_ticks.py - drain kernel buffer only"]
+        TCP_SOCK
+        BUF
+        XADD
+    end
+
+    subgraph VALIDATION ["Validation - tick_validator.py - separate process"]
+        XREAD
+        EXTRACT
+        CAST
+        VAL_TICK
+        VAL_SEQ
+        ENCODE
+        DROP
+    end
+
+    subgraph VOLUME_PROFILE ["Volume Profile - volume_profile.py - stateful incremental"]
+        VP_READ
+        VP_UPDATE
+        VP_SNAP
+    end

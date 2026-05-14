@@ -1,0 +1,63 @@
+flowchart TD
+
+    REDIS_TICK[("Redis Stream - tick_data_validated")]
+    XREAD["r.xread() - block=100ms - count=500"]
+    PARSE["parse_xread_to_ticks() - tick_codec.py - decode + cast only - already validated by tick_validator.py"]
+
+    FIRST{"first tick of session?"}
+    INIT["_init_session() - pre-allocate profile array of zeros - range_ticks + 1 levels - centered on first tick.high"]
+
+    UPDATE["_update() - snap tick.high to tick grid - compute index - O(1) common case"]
+    BOUNDS{"index within grid?"}
+    ADD["profile[index] += volume - single C op"]
+
+    EXTEND_LOW["extend low - prepend zeros - max(extension - gap) ticks - min_price shifts down - extensions += 1"]
+    EXTEND_HIGH["extend high - append zeros - max(extension - gap) ticks - extensions += 1"]
+
+    SNAPSHOT["_snapshot() - derive price_levels from min_price + arange - profile.copy()"]
+    POC["_find_poc() - np.argmax"]
+    VA["_find_value_area() - np.argsort + np.cumsum - 70 percent value area"]
+
+    RESULT["VolumeProfileResult - symbol - date - bar_num - tick_size - range_ticks - poc_price - poc_volume - value_area_low - value_area_high - total_volume"]
+
+    REDIS_OUT[("Redis Stream - features_volume_profile")]
+
+    REDIS_TICK -->|"XREAD validated ticks"| XREAD
+    XREAD --> PARSE
+    PARSE -->|"typed Tick - high == low"| FIRST
+    FIRST -->|"yes - new day or startup"| INIT
+    INIT --> UPDATE
+    FIRST -->|"no"| UPDATE
+    UPDATE --> BOUNDS
+    BOUNDS -->|"within grid"| ADD
+    BOUNDS -->|"below floor"| EXTEND_LOW
+    BOUNDS -->|"above ceiling"| EXTEND_HIGH
+    EXTEND_LOW --> ADD
+    EXTEND_HIGH --> ADD
+    ADD --> SNAPSHOT
+    SNAPSHOT --> POC
+    SNAPSHOT --> VA
+    POC -->|"poc_price - poc_volume"| RESULT
+    VA -->|"val - vah"| RESULT
+    RESULT -->|"xadd scalar fields"| REDIS_OUT
+
+    subgraph ADAPTER ["Adapter - stream_ticks_from_redis() inside volume_profile.py - reads tick_data_validated"]
+        XREAD
+        PARSE
+    end
+
+    subgraph APPLICATION ["Application - session lifecycle"]
+        FIRST
+        INIT
+    end
+
+    subgraph DOMAIN ["Domain - Stateful Profile - O(1) per tick"]
+        UPDATE
+        BOUNDS
+        ADD
+        EXTEND_LOW
+        EXTEND_HIGH
+        SNAPSHOT
+        POC
+        VA
+    end

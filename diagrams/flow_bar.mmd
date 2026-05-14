@@ -1,0 +1,70 @@
+flowchart TD
+
+    TS([TradeStation - EasyLanguage])
+    DLL["BarBridge.dll - C++ Win32 - SendBar()"]
+    TCP_SOCK["TCP Socket - port 9009 - tcp_to_redis_connection.py"]
+    BUF["Line Buffer - split on newline"]
+    PARSE["parse_csv_line - bar_codec.py"]
+    VAL_BAR["validate_bar - bar_contract.py"]
+    VAL_SEQ["validate_sequence - bar_contract.py"]
+    ENCODE["bar_to_redis_fields - bar_codec.py"]
+    REDIS_CONN["get_redis_connection - redis_tool.py"]
+    DOCKER["Docker Container - redis - port 6381"]
+    REDIS[("Redis Stream - validated_bar")]
+    DROP["Drop and Log - DecodeError or ContractError"]
+
+    XREAD["redis_client.xread"]
+    UNWRAP["parse_xread_to_bars - bar_codec.py"]
+    FIELDS["bar_from_redis_fields - bar_codec.py"]
+    BATCH["XReadBatch - bars list - last_ids dict"]
+
+    FE1["feat_eng_1.py - modSlope5 - 5-bar window"]
+    TF["transformer_features.py - 8 features - 60-bar window"]
+    REDIS_TF[("Redis Stream - features_transformer")]
+
+    TS -->|"1 - SEND on bar close"| DLL
+    DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
+    DOCKER -->|"hosts Redis on 127.0.0.1:6381"| REDIS
+    REDIS_CONN -->|"Redis client"| TCP_SOCK
+    TCP_SOCK -->|"3 - READ from kernel buffer"| BUF
+    BUF -->|"4 - EXTRACT one line at a time"| PARSE
+    PARSE -->|"5 - CAST str to int and float"| VAL_BAR
+    VAL_BAR -->|"6 - ENFORCE single bar invariants - pass"| VAL_SEQ
+    VAL_BAR -->|"fail"| DROP
+    VAL_SEQ -->|"7 - ENFORCE sequence invariants - pass"| ENCODE
+    VAL_SEQ -->|"fail"| DROP
+    ENCODE -->|"8 - ENCODE typed Bar to strings"| REDIS
+    REDIS -->|"9 - XREAD payload"| XREAD
+    XREAD -->|"10 - UNWRAP nested structure"| UNWRAP
+
+    subgraph LOOP ["LOOP - for each entry in XREAD result"]
+        UNWRAP -->|"one field map per entry"| FIELDS
+        FIELDS -->|"typed Bar appended to list"| BATCH
+        UNWRAP -->|"after all entries done"| BATCH
+    end
+
+    BATCH -->|"11 - YIELD typed Bars"| FE1
+    BATCH -->|"11 - YIELD typed Bars"| TF
+    TF -->|"12 - PUSH features"| REDIS_TF
+
+    subgraph PIPELINES ["Feature Pipelines - read only - no re-validation"]
+        FE1
+        TF
+    end
+
+    subgraph INGEST ["Ingestion - tcp_to_redis_connection.py"]
+        BUF
+        PARSE
+        ENCODE
+        DROP
+    end
+
+    subgraph CONTRACT ["Contract Enforcement - bar_contract.py"]
+        VAL_BAR
+        VAL_SEQ
+    end
+
+    subgraph INFRA ["Infrastructure"]
+        REDIS_CONN
+        DOCKER
+    end

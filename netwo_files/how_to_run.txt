@@ -33,7 +33,7 @@ You should see:
     1) [bar_server] Connected to Redis1
        -Host: 127.0.0.1
        -Port: 6381
-       -Stream Name: bars_raw
+       -Stream Name: validated_bar
 
     2) [bar_server] Listening TCP
        -Host: 127.0.0.1
@@ -49,7 +49,7 @@ Make sure the DllPath input points to your compiled BarBridge.dll.
 
 On each bar close, TradeStation calls SendBar() through the DLL,
 which sends a CSV line to 127.0.0.1:9009.
-The Python server parses it, validates it, and writes it to Redis stream "bars_raw".
+The Python server parses it, validates it, and writes it to Redis stream "validated_bar".
 
 
 STEP 4 (Optional) - Run the Feature Pipeline
@@ -60,7 +60,7 @@ or
 
     python -m feat_files.feat_eng_1
 
-These read from Redis stream "bars_raw" and emit feature points.
+These read from Redis stream "validated_bar" and emit feature points.
 
 
 PORTS USED
