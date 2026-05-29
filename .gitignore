@@ -18,3 +18,11 @@ __pycache__/
 # Secrets
 .env
 *.env
+
+# Reports
+report_rl_transformer.pdf
+report_pipeline.md
+
+# wandb
+training_mlp/wandb/
+wandb/

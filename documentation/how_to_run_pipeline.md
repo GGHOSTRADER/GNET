@@ -1,5 +1,5 @@
 # How to Run the Pipeline
-> **What:** Ordered steps to start the full data pipeline — Docker, Redis, Python servers, TradeStation, and feature pipelines.
+> **What:** Ordered steps to start the full data pipeline — Docker, Redis, Python servers, TradeStation, and feature/inference pipelines.
 
 Run these steps **in order**, each in its own PowerShell terminal.
 
@@ -41,7 +41,6 @@ python -m netwo_files.tcp_to_redis_ticks
 python -m netwo_files.tick_validator
 
 # Terminal 3 — volume profile reads from tick_data_validated
-python -m feat_files.volume_profile
 python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600
 ```
 
@@ -49,29 +48,63 @@ python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600
 
 ---
 
-## Step 4 — Apply EasyLanguage Indicators in TradeStation
+## Step 4 — Start the Transformer Feature Pipeline
 
-- **Bar chart:** apply indicator from [[easylanguage_bar_indicator]] — uses `BarBridge.dll` → port 9009
-- **Tick chart:** apply indicator from [[easylanguage_tick_indicator]] — uses `TickBridge.dll` → port 9010
+```bash
+python -m feat_files.transformer_features
+```
+
+This computes all 13 MLP features (including `day_of_week`) and publishes them to the `features_transformer` Redis stream.
+
+Expected output once warmed up (60 bars):
+```
+ESM25 date=... t=... bar=60 pvol5=... ofi5=... signal=...
+```
 
 ---
 
-## Step 5 (Optional) — Start Other Feature Pipelines
+## Step 5 — Start the Inference Layer
+
+Open **2 separate terminals**:
 
 ```bash
-python -m feat_files.feat_eng_1      # modSlope5 — reads validated_bar
-python -m transformer_features       # 8 features  — reads validated_bar
+# Terminal 1 — loads model_best.pt, reads features_transformer, writes trade_signal
+python -m inference.inference_engine
+
+# Terminal 2 — reads trade_signal, serves persistent TCP connection on port 9011
+python -m inference.signal_tcp_server
 ```
+
+Start `inference_engine` before `signal_tcp_server`. The engine must be writing to `trade_signal` before the server has anything to forward.
+
+Expected output from inference_engine:
+```
+[inference] Ready
+  model   : training_mlp/experiments/mlp_baseline/model_best.pt
+  device  : cpu
+  threshold: 0.5
+[inference] bar=61 prob=0.3821 signal=0 (no trade)
+[inference] bar=62 prob=0.6140 signal=1 (BUY)
+```
+
+---
+
+## Step 6 — Apply EasyLanguage Indicators in TradeStation
+
+- **Bar chart:** apply indicator from [[easylanguage_bar_indicator]] — uses `BarBridge.dll` → port 9009
+- **Tick chart:** apply indicator from [[easylanguage_tick_indicator]] — uses `TickBridge.dll` → port 9010
+- **Signal receiver:** apply indicator from [[easylanguage_signal_indicator]] — uses `SignalBridge.dll` → port 9011
 
 ---
 
 ## Ports Reference
 
-| Port | Used By |
-|---|---|
-| `9009` | Bar TCP server — TradeStation bar DLL connects here |
-| `9010` | Tick TCP server — TradeStation tick DLL connects here |
-| `6381` | Redis — Docker container (mapped from internal 6379) |
+| Port | Used By | Direction |
+|---|---|---|
+| `9009` | Bar TCP server — TradeStation bar DLL connects here | TS → Python |
+| `9010` | Tick TCP server — TradeStation tick DLL connects here | TS → Python |
+| `9011` | Signal TCP server — TradeStation signal DLL connects here | Python → TS |
+| `6381` | Redis — Docker container (mapped from internal 6379) | local |
 
 ## Redis Streams Reference
 
@@ -80,3 +113,6 @@ python -m transformer_features       # 8 features  — reads validated_bar
 | `validated_bar` | `tcp_to_redis_connection.py` | `feat_eng_1.py`, `transformer_features.py` |
 | `tick_data_raw` | `tcp_to_redis_ticks.py` | `tick_validator.py` |
 | `tick_data_validated` | `tick_validator.py` | `volume_profile.py` |
+| `features_transformer` | `transformer_features.py` | `inference_engine.py`, `consolidator.py` |
+| `features_volume_profile` | `volume_profile.py` | `consolidator.py` |
+| `trade_signal` | `inference_engine.py` | `signal_tcp_server.py` |

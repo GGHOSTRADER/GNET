@@ -13,7 +13,7 @@ from tqdm import tqdm
 import wandb
 
 # INJECTIBLE -------------------------------------------------------------------
-DATA_FILE      = "../df_features_labeled.csv"
+DATA_FILE      = "df_features_labeled.csv"
 OUTPUT_DIR     = "experiments/mlp_baseline"
 RANDOM_SEED    = 42
 BATCH_SIZE     = 64

@@ -3,6 +3,33 @@
 
 ---
 
+## 2026-05-22 (session 4)
+
+### Inference Layer — built from scratch
+
+- `inference/inference_engine.py` — reads `features_transformer` Redis stream, scales with `scaler_best.pkl`, runs `model_best.pt` MLP forward pass, writes `signal` + `prob` to `trade_signal` stream. Threshold injectable (default 0.5).
+- `inference/signal_tcp_server.py` — reads `trade_signal`, maintains one persistent TCP connection on port 9011, sends `symbol,signal,prob\n` per signal to TradeStation.
+- `EL_files/signal_dll.cpp` — `SignalBridge.dll`. EL calls `RecvSignal(symbol, signal, prob)` on each bar close. Non-blocking: returns 0 immediately if no signal ready, 1 on new signal. Persistent TCP client to port 9011.
+- `config/setting.py` — added `TCP_SIGNAL_PORT=9011` and `REDIS1_SIGNAL_STREAM="trade_signal"`.
+
+### day_of_week feature added to transformer pipeline
+
+- `feat_files/transformer_features.py` — added `_day_of_week()` pure function (YYYYMMDD → Python weekday int, Monday=0), added `day_of_week` to `FeaturePoint` dataclass and `_feature_point_to_redis_fields()` encoder.
+- Feature is now published in the `features_transformer` Redis stream alongside the other 12 features.
+- Inference engine reads it directly from the stream — no derivation at inference time.
+
+### Documentation and diagrams updated
+
+- `diagrams/flow_bar.mmd` — extended to show full inference loop: `features_transformer` → `inference_engine` → `trade_signal` → `signal_tcp_server` → `SignalBridge.dll` → TradeStation
+- `diagrams/system_overview.mmd` — added inference layer and signal return path back to TS
+- `documentation/features_list.md` — added `day_of_week` row, MLP feature order table, VP features noted as not yet used
+- `documentation/project_control_center.md` — added Inference Layer component section, updated System Flow (steps 6-7), ports table with direction column, Redis streams table with `trade_signal`, updated launch steps
+- `documentation/how_to_run_pipeline.md` — added Step 4 (transformer features), Step 5 (inference layer), updated ports and streams reference tables
+- `documentation/how_to_compile_dll.md` — refactored to cover all three DLLs with a summary table
+- `documentation/easylanguage_signal_indicator.md` — new file with EasyLanguage code for `RecvSignal()` integration
+
+---
+
 ## 2026-05-14 (session 3)
 
 ### Consolidator

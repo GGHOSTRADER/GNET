@@ -74,6 +74,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
+from datetime import date as _date
 from typing import Any, Deque, Iterator, Sequence
 
 from config.setting import (
@@ -200,6 +201,14 @@ def _minutes_since_open(bar: Any) -> float:
     return float(max((bar.time_s - _OPEN_S) / 60.0, 0.0))
 
 
+def _day_of_week(yyyymmdd: int) -> int:
+    """Monday=0 … Sunday=6, derived from YYYYMMDD int."""
+    y = yyyymmdd // 10000
+    m = (yyyymmdd % 10000) // 100
+    d = yyyymmdd % 100
+    return _date(y, m, d).weekday()
+
+
 def _is_first_last_30min(bar: Any) -> int:
     """1 if bar is in first 30 min (09:30-10:00) or last 30 min (15:30-16:00) of session."""
     mins = max((bar.time_s - _OPEN_S) / 60.0, 0.0)
@@ -231,6 +240,7 @@ class FeaturePoint:
     vwap_distance: float
     minutes_since_open: float
     is_first_last_30min: int
+    day_of_week: int
 
 
 # ============================================================
@@ -309,6 +319,7 @@ def stream_feature_points(
             vwap_distance=_vwap_distance(bar, atr),
             minutes_since_open=_minutes_since_open(bar),
             is_first_last_30min=_is_first_last_30min(bar),
+            day_of_week=_day_of_week(bar.date),
         )
 
 
@@ -336,6 +347,7 @@ def _feature_point_to_redis_fields(fp: FeaturePoint) -> dict:
         "vwap_distance":    repr(fp.vwap_distance),
         "minutes_since_open": repr(fp.minutes_since_open),
         "is_first_last_30min": str(fp.is_first_last_30min),
+        "day_of_week":         str(fp.day_of_week),
     }
 
 

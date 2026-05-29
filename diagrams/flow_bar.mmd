@@ -19,8 +19,13 @@ flowchart TD
     BATCH["XReadBatch - bars list - last_ids dict"]
 
     FE1["feat_eng_1.py - modSlope5 - 5-bar window"]
-    TF["transformer_features.py - 8 features - 60-bar window"]
+    TF["transformer_features.py - 13 features + day_of_week - 60-bar window"]
     REDIS_TF[("Redis Stream - features_transformer")]
+    INFERENCE["inference_engine.py - load scaler + MLP - scale - forward pass - sigmoid"]
+    REDIS_SIG[("Redis Stream - trade_signal")]
+    SIG_SERVER["signal_tcp_server.py - port 9011 - persistent TCP server"]
+    SIG_DLL["SignalBridge.dll - RecvSignal() - non-blocking"]
+    TS_RECV([TradeStation - EasyLanguage - polls RecvSignal on bar close])
 
     TS -->|"1 - SEND on bar close"| DLL
     DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
@@ -45,7 +50,12 @@ flowchart TD
 
     BATCH -->|"11 - YIELD typed Bars"| FE1
     BATCH -->|"11 - YIELD typed Bars"| TF
-    TF -->|"12 - PUSH features"| REDIS_TF
+    TF -->|"12 - PUSH 13 features"| REDIS_TF
+    REDIS_TF -->|"13 - XREAD features"| INFERENCE
+    INFERENCE -->|"14 - PUSH signal + prob"| REDIS_SIG
+    REDIS_SIG -->|"15 - XREAD signal"| SIG_SERVER
+    SIG_SERVER -->|"16 - symbol,signal,prob line"| SIG_DLL
+    SIG_DLL -->|"17 - RecvSignal return 1 = BUY"| TS_RECV
 
     subgraph PIPELINES ["Feature Pipelines - read only - no re-validation"]
         FE1
@@ -67,4 +77,11 @@ flowchart TD
     subgraph INFRA ["Infrastructure"]
         REDIS_CONN
         DOCKER
+    end
+
+    subgraph INFERENCE_LAYER ["Inference Layer"]
+        INFERENCE
+        REDIS_SIG
+        SIG_SERVER
+        SIG_DLL
     end

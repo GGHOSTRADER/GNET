@@ -1,25 +1,16 @@
-# How to Compile and Run the TradeStation DLL
-> **What:** Step-by-step guide to compile `dll.cpp` into `BarBridge.dll` using Visual Studio and wire it up in TradeStation.
+# How to Compile the TradeStation DLLs
+> **What:** Step-by-step guide to compile C++ DLLs using Visual Studio and wire them up in TradeStation.
 
 ---
 
-## Step 1 — Create the Indicator in TradeStation
-
-1. Open TradeStation EasyLanguage Editor
-2. Create a new indicator
-3. Paste the contents of `el_dll.md` into it
-4. Save it and apply it to a chart
-
----
-
-## Step 2 — Download Visual Studio Community
+## Step 1 — Download Visual Studio Community
 
 - Go to: https://visualstudio.microsoft.com/vs/community/
 - Download and run the installer
 
 ---
 
-## Step 3 — Install the C++ Package
+## Step 2 — Install the C++ Package
 
 - In the Visual Studio Installer, check **"Desktop development with C++"**
 - Click Install
@@ -27,7 +18,7 @@
 
 ---
 
-## Step 4 — Open Developer Command Prompt
+## Step 3 — Open Developer Command Prompt
 
 - Press the **Windows key**
 - Search for **"Developer Command Prompt"**
@@ -37,38 +28,65 @@
 
 ---
 
-## Step 5 — Compile the DLL
+## Step 4 — Compile the DLLs
 
-Run these two commands in the Developer Command Prompt:
+Navigate to the EL_files folder, then compile whichever DLL you need:
 
 ```bash
 cd C:\Users\g_med\python_new\GNET\EL_files
+```
+
+### BarBridge.dll — sends bar data from TradeStation to Python (port 9009)
+```bash
 cl /LD /EHsc dll.cpp ws2_32.lib /Fe:BarBridge.dll
+```
+
+### TickBridge.dll — sends tick data from TradeStation to Python (port 9010)
+```bash
+cl /LD /EHsc tick_dll.cpp ws2_32.lib /Fe:TickBridge.dll
+```
+
+### SignalBridge.dll — receives trade signals from Python to TradeStation (port 9011)
+```bash
+cl /LD /EHsc signal_dll.cpp ws2_32.lib /Fe:SignalBridge.dll
 ```
 
 You should see output ending with:
 ```
-Creating library BarBridge.lib and object BarBridge.obj
+Creating library <Name>.lib and object <Name>.obj
 ```
 
-`BarBridge.dll` will now appear in the `EL_files` folder.
+The `.dll` file will appear in the `EL_files` folder.
 
 ---
 
-## Step 6 — Update the EasyLanguage Script
+## Step 5 — Apply the EasyLanguage Indicator
 
-Make sure **both** paths in the indicator point to the compiled `.dll` (not the `.cpp`):
+1. Open TradeStation EasyLanguage Editor
+2. Create a new indicator
+3. Paste the code from the relevant indicator doc:
+   - Sending bars → [[easylanguage_bar_indicator]]
+   - Sending ticks → [[easylanguage_tick_indicator]]
+   - Receiving signals → [[easylanguage_signal_indicator]]
+4. Save it and apply it to a chart
 
-```
-External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBar", ...
-```
+Make sure the `External` path in the indicator points to the compiled `.dll`, not the `.cpp` source.
 
-Save and reapply the indicator in TradeStation.
+---
+
+## DLL Summary
+
+| DLL | Source | Port | Direction | Function |
+|---|---|---|---|---|
+| `BarBridge.dll` | `dll.cpp` | `9009` | TS → Python | `SendBar()` |
+| `TickBridge.dll` | `tick_dll.cpp` | `9010` | TS → Python | `SendTick()` |
+| `SignalBridge.dll` | `signal_dll.cpp` | `9011` | Python → TS | `RecvSignal()` |
 
 ---
 
 ## Notes
 
-- The DLL connects to `127.0.0.1:9009` — your Python TCP server must be running first
-- Data is only sent on bar close (`BarStatus = 2`)
-- See `netwo_files/how_to_run.md` for how to start Redis and the Python server
+- All DLLs connect to `127.0.0.1` — Python processes must be running before TradeStation loads the DLL
+- `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
+- `SignalBridge` is a persistent client that uses non-blocking recv — returns 0 immediately if no signal is ready, 1 when a signal arrives
+- See [[how_to_run_pipeline]] for the correct start order
