@@ -1,6 +1,19 @@
+---
+title: GNET System Overview
+config:
+  themeCSS: |
+    .titleText { font-size: 30px !important; font-weight: 700 !important; }
+---
 flowchart TD
 
+    LEGEND_BAR["Blue: Bar pipeline"]
+    LEGEND_TICK["Green: Tick and volume-profile pipeline"]
+    LEGEND_SHARED["Gray: Shared infrastructure"]
+
     TS([TradeStation])
+    LEGEND_BAR ~~~ LEGEND_TICK
+    LEGEND_TICK ~~~ LEGEND_SHARED
+    LEGEND_SHARED ~~~ TS
 
     TS -->|"bar close"| BAR_DLL["BarBridge.dll - port 9009"]
     TS -->|"every tick"| TICK_DLL["TickBridge.dll - port 9010"]
@@ -15,7 +28,9 @@ flowchart TD
     VALIDATOR -->|"tick_data_validated"| REDIS
 
     REDIS -->|"validated_bar"| FE1["feat_eng_1.py - modSlope5"]
-    REDIS -->|"validated_bar"| TF["transformer_features.py - 13 features"]
+    REDIS -->|"validated_bar"| TF["transformer_features.py - Redis orchestration and publishing"]
+    TF -->|"in-process library call"| CANONICAL["canonical_features.py - FeatureEngine - 13 MA formulas"]
+    CANONICAL -.->|"13 FeatureValues returned"| TF
     REDIS -->|"tick_data_validated"| VP["volume_profile.py - POC - Value Area - derived POC features - update per tick, snapshot per bar"]
 
     TF -->|"features_transformer"| REDIS
@@ -25,20 +40,20 @@ flowchart TD
     REDIS -->|"features_volume_profile - latest"| CONSOLIDATOR
 
     REDIS -->|"features_transformer"| INFERENCE["inference_engine.py - scale - MLP forward pass - sigmoid threshold"]
+    TRAINING["training_mlp - offline MA training"] -->|"produces"| ARTIFACTS["MA2CrossLE model artifacts - model_best.pt - scaler_best.pkl - config.json"]
+    ARTIFACTS -->|"loaded at inference startup"| INFERENCE
     INFERENCE -->|"trade_signal"| REDIS
 
     REDIS -->|"trade_signal"| SIG_SERVER["signal_tcp_server.py - port 9011"]
     SIG_SERVER -->|"symbol,signal,prob"| SIG_DLL["SignalBridge.dll - RecvSignal()"]
     SIG_DLL -->|"buy signal"| TS
 
-    LEGEND["Legend<br/>Blue: Bar pipeline<br/>Green: Tick and volume-profile pipeline<br/>Gray: Shared infrastructure"]
-
     classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
-    classDef legendBox fill:#ffffff,stroke:#9ca3af,color:#111827,stroke-width:1px,stroke-dasharray:4 3
-
-    class BAR_DLL,BAR_SERVER,FE1,TF,INFERENCE,SIG_SERVER,SIG_DLL barPath
+    class BAR_DLL,BAR_SERVER,FE1,TF,CANONICAL,TRAINING,ARTIFACTS,INFERENCE,SIG_SERVER,SIG_DLL barPath
     class TICK_DLL,TICK_SERVER,VALIDATOR,VP tickPath
     class TS,REDIS,CONSOLIDATOR sharedPath
-    class LEGEND legendBox
+    class LEGEND_BAR barPath
+    class LEGEND_TICK tickPath
+    class LEGEND_SHARED sharedPath

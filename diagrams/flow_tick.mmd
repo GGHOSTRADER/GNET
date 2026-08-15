@@ -1,3 +1,6 @@
+---
+title: GNET Tick Validation and Volume-Profile Flow
+---
 flowchart TD
 
     TS([TradeStation - EasyLanguage])
@@ -19,8 +22,8 @@ flowchart TD
     VP_READ["stream_ticks_from_redis - volume_profile.py - xread tick_data_validated"]
     VP_UPDATE["_update - O(1) profile update - profile[index] += volume - every tick"]
     VP_GATE{"time_s % snapshot_interval_s == interval - 1 ?"}
-    VP_SNAP["_snapshot - POC + Value Area + derived POC features - numpy argmax + argsort, once per bar"]
-    REDIS_VP[("Redis Stream - features_volume_profile - maxlen 50000 - 1 per bar")]
+    VP_SNAP["_snapshot - POC + Value Area + derived POC features - runs on each qualifying tick"]
+    REDIS_VP[("Redis Stream - features_volume_profile - maxlen 50000 - may contain multiple entries per interval")]
 
     TS -->|"1 - SEND on every tick"| DLL
     DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
@@ -43,7 +46,7 @@ flowchart TD
     VP_READ -->|"14 - typed Tick"| VP_UPDATE
     VP_UPDATE --> VP_GATE
     VP_GATE -->|"no - wait for next tick"| VP_READ
-    VP_GATE -->|"15 - yes, 1s before bar close"| VP_SNAP
+    VP_GATE -->|"15 - yes, tick timestamp is in final second"| VP_SNAP
     VP_SNAP -->|"16 - PUSH POC + VA + derived features"| REDIS_VP
 
     subgraph INGEST ["Ingest - tcp_to_redis_ticks.py - drain kernel buffer only"]
@@ -62,7 +65,7 @@ flowchart TD
         DROP
     end
 
-    subgraph VOLUME_PROFILE ["Volume Profile - volume_profile.py - update per tick, snapshot per bar"]
+    subgraph VOLUME_PROFILE ["Volume Profile - volume_profile.py - update every tick, snapshot every qualifying final-second tick"]
         VP_READ
         VP_UPDATE
         VP_GATE

@@ -1,3 +1,6 @@
+---
+title: GNET Volume-Profile Internals
+---
 flowchart TD
 
     REDIS_TICK[("Redis Stream - tick_data_validated")]
@@ -21,9 +24,9 @@ flowchart TD
     VA["_find_value_area() - np.argsort + np.cumsum - 70 percent value area"]
     DERIVED["_compute_derived_features() - poc_distance - poc_concentration - va_width - va_position - vol_above_poc_ratio - profile_entropy - profile_kurtosis - poc_migration (vs prev_poc_price)"]
 
-    RESULT["VolumeProfileResult - symbol - date - bar_num - tick_size - range_ticks - poc_price - poc_volume - value_area_low - value_area_high - total_volume - poc_distance - poc_concentration - va_width - va_position - vol_above_poc_ratio - profile_entropy - profile_kurtosis - poc_migration"]
+    RESULT["VolumeProfileResult - metadata - profile arrays - POC - Value Area - total volume - n_bars - extensions - 8 derived features"]
 
-    REDIS_OUT[("Redis Stream - features_volume_profile - one entry per bar")]
+    REDIS_OUT[("Redis Stream - features_volume_profile - scalar fields only - may contain multiple entries per interval")]
 
     REDIS_TICK -->|"XREAD validated ticks"| XREAD
     XREAD --> PARSE
@@ -39,7 +42,7 @@ flowchart TD
     EXTEND_HIGH --> ADD
     ADD --> GATE
     GATE -->|"no - wait for next tick"| XREAD
-    GATE -->|"yes - 1s before bar close"| SNAPSHOT
+    GATE -->|"yes - each tick timestamped in final second"| SNAPSHOT
     SNAPSHOT --> POC
     SNAPSHOT --> VA
     POC --> DERIVED
@@ -60,7 +63,7 @@ flowchart TD
         GATE
     end
 
-    subgraph DOMAIN ["Domain - Stateful Profile - update O(1) per tick, snapshot once per bar"]
+    subgraph DOMAIN ["Domain - Stateful Profile - update O(1) per tick, snapshot on every qualifying final-second tick"]
         UPDATE
         BOUNDS
         ADD

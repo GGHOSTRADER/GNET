@@ -183,3 +183,9 @@ python -m inference.signal_tcp_server
 | [[volume_profile_design]] | Volume profile design and API |
 | [[features_list]] | All engineered features reference table |
 | [[easylanguage_signal_indicator]] | EasyLanguage code to receive signals from `SignalBridge.dll` |
+
+---
+
+## Open TODOs
+
+- **Volume-profile snapshot cadence:** decide whether `volume_profile.py` should keep publishing on every qualifying tick during the final second of each interval, deduplicate to the first qualifying tick, or publish the completed interval at the next boundary. Current behavior is intentionally unchanged and may produce multiple `features_volume_profile` entries for one 30-second interval.

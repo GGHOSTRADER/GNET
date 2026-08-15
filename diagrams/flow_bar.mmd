@@ -1,3 +1,6 @@
+---
+title: GNET Bar and MA Inference Flow
+---
 flowchart TD
 
     TS([TradeStation - EasyLanguage])
@@ -18,10 +21,12 @@ flowchart TD
     FIELDS["bar_from_redis_fields - bar_codec.py"]
     BATCH["XReadBatch - bars list - last_ids dict"]
 
-    FE1["feat_eng_1.py - modSlope5 - 5-bar window"]
-    TF["transformer_features.py - 13 features + day_of_week - 60-bar window"]
+    TF["transformer_features.py - Redis orchestration - same Python process"]
+    CANONICAL["canonical_features.py - FeatureEngine - canonical 13 MA formulas - 60-bar window"]
     REDIS_TF[("Redis Stream - features_transformer")]
-    INFERENCE["inference_engine.py - load scaler + MLP - scale - forward pass - sigmoid"]
+    TRAINING["training_mlp - offline MA training"]
+    ARTIFACTS["MA2CrossLE artifacts - model_best.pt - scaler_best.pkl - config.json"]
+    INFERENCE["inference_engine.py - load artifacts - scale - MLP forward pass - sigmoid"]
     REDIS_SIG[("Redis Stream - trade_signal")]
     SIG_SERVER["signal_tcp_server.py - port 9011 - persistent TCP server"]
     SIG_DLL["SignalBridge.dll - RecvSignal() - non-blocking"]
@@ -30,7 +35,7 @@ flowchart TD
     TS -->|"1 - SEND on bar close"| DLL
     DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
     DOCKER -->|"hosts Redis on 127.0.0.1:6381"| REDIS
-    REDIS_CONN -->|"Redis client"| TCP_SOCK
+    REDIS_CONN -->|"creates client"| REDIS
     TCP_SOCK -->|"3 - READ from kernel buffer"| BUF
     BUF -->|"4 - EXTRACT one line at a time"| PARSE
     PARSE -->|"5 - CAST str to int and float"| VAL_BAR
@@ -48,18 +53,21 @@ flowchart TD
         UNWRAP -->|"after all entries done"| BATCH
     end
 
-    BATCH -->|"11 - YIELD typed Bars"| FE1
     BATCH -->|"11 - YIELD typed Bars"| TF
-    TF -->|"12 - PUSH 13 features"| REDIS_TF
-    REDIS_TF -->|"13 - XREAD features"| INFERENCE
-    INFERENCE -->|"14 - PUSH signal + prob"| REDIS_SIG
-    REDIS_SIG -->|"15 - XREAD signal"| SIG_SERVER
-    SIG_SERVER -->|"16 - symbol,signal,prob line"| SIG_DLL
-    SIG_DLL -->|"17 - RecvSignal return 1 = BUY"| TS_RECV
+    TF -->|"12 - in-process call per bar"| CANONICAL
+    CANONICAL -.->|"13 - return 13 FeatureValues"| TF
+    TF -->|"14 - PUSH feature record"| REDIS_TF
+    TRAINING -->|"produces"| ARTIFACTS
+    ARTIFACTS -->|"loaded at startup"| INFERENCE
+    REDIS_TF -->|"15 - XREAD features"| INFERENCE
+    INFERENCE -->|"16 - PUSH signal + prob"| REDIS_SIG
+    REDIS_SIG -->|"17 - XREAD signal"| SIG_SERVER
+    SIG_SERVER -->|"18 - symbol,signal,prob line"| SIG_DLL
+    SIG_DLL -->|"19 - RecvSignal return 1 = BUY"| TS_RECV
 
     subgraph PIPELINES ["Feature Pipelines - read only - no re-validation"]
-        FE1
         TF
+        CANONICAL
     end
 
     subgraph INGEST ["Ingestion - tcp_to_redis_connection.py"]
@@ -80,6 +88,7 @@ flowchart TD
     end
 
     subgraph INFERENCE_LAYER ["Inference Layer"]
+        ARTIFACTS
         INFERENCE
         REDIS_SIG
         SIG_SERVER
