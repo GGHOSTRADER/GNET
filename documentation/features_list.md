@@ -6,10 +6,10 @@ All features are computed in `feat_files/transformer_features.py` from a 60-bar 
 | Feature                 | Type  | Description                                                                        |
 | ----------------------- | ----- | ---------------------------------------------------------------------------------- |
 | parkinson_vol_{5,15,30} | float | Volatility estimated from High/Low range — more efficient than close-to-close vol  |
-| ofi_{5,15,30}           | float | Order Flow Imbalance — net buy vs sell volume (Up - Down) over rolling window      |
+| ofi_{5,15,30}           | float | Order Flow Imbalance — (sum(Up)-sum(Down)) / (sum(Up)+sum(Down)) over rolling window, bounded [-1,1] |
 | volume_percentile       | float | Where current volume ranks vs last 60 bars (0–1)                                   |
 | volume_momentum         | float | Volume % change over last 5 bars                                                   |
-| amihud_illiquidity      | float | Price impact per unit volume — high = illiquid, moves easily                       |
+| amihud_illiquidity      | float | Rolling 30-bar mean of \|pct_change(Close)\| / (Close × Volume) — price impact per dollar traded |
 | vwap_distance           | float | How far price is from VWAP, normalized by ATR                                      |
 | minutes_since_open      | float | Minutes elapsed since 09:30 open                                                   |
 | is_first_last_30min     | int   | Binary flag — 1 if in first or last 30min of session                               |
@@ -35,12 +35,20 @@ Output: `signal=1` (buy) when `sigmoid(logit) >= THRESHOLD` (default 0.5).
 
 ## Volume Profile Features (not used by current MLP)
 
-Computed by `feat_files/volume_profile.py` from tick data. Available in `features_volume_profile` stream but not included in the trained model yet.
+Computed by `feat_files/volume_profile.py` from tick data. `_update()` runs on every tick (O(1)); a snapshot (all fields below) is emitted once per bar, 1 second before bar close (`tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`, default `snapshot_interval_s=30`). Available in `features_volume_profile` stream but not included in the trained model yet.
 
-| Feature          | Description                              |
-| ---------------- | ---------------------------------------- |
-| poc_price        | Point of Control — price with most volume |
-| poc_volume       | Volume at the POC level                  |
-| value_area_low   | VAL — lower bound of 70% value area      |
-| value_area_high  | VAH — upper bound of 70% value area      |
-| total_volume     | Total session volume so far              |
+| Feature             | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| poc_price           | Point of Control — price with most volume                               |
+| poc_volume          | Volume at the POC level                                                  |
+| value_area_low      | VAL — lower bound of 70% value area                                      |
+| value_area_high     | VAH — upper bound of 70% value area                                      |
+| total_volume        | Total session volume so far                                              |
+| poc_distance        | (current_price - poc_price) / tick_size — signed distance from POC      |
+| poc_concentration   | poc_volume / total_volume — how peaked vs diffuse the profile is        |
+| va_width            | (value_area_high - value_area_low) / tick_size                          |
+| va_position         | (current_price - VAL) / (VAH - VAL) — 0=at VAL, 1=at VAH, outside [0,1]=outside VA |
+| vol_above_poc_ratio | Fraction of total volume traded above the POC price                     |
+| profile_entropy     | -Σp·log(p) over the volume distribution — low=concentrated, high=diffuse |
+| profile_kurtosis    | Excess kurtosis of the volume distribution — peakedness of the profile  |
+| poc_migration       | (poc_price_now - poc_price_prev_bar) / tick_size — POC drift since last bar |

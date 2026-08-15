@@ -1,0 +1,27 @@
+{
+  "lookback": 60,
+  "n_bar_features": 7,
+  "bar_features": [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Up",
+    "Down",
+    "Volume"
+  ],
+  "architecture": "LSTM(64,2)->Linear(32)->1",
+  "epochs": 100,
+  "batch_size": 16,
+  "lr": 0.001,
+  "patience": 5,
+  "n_splits": 25,
+  "fold_size": 872,
+  "purge_bars": 20,
+  "embargo_bars": 60,
+  "test_size": 0.1,
+  "naive_acc": 0.553090887864106,
+  "best_fold": 6,
+  "best_fold_val_auc": 0.5392346776754524,
+  "output_dir": "C:\\Users\\g_med\\python_new\\GNET\\training_mlp\\strategies\\zona_strat\\model\\lstm"
+}

@@ -9,10 +9,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import wandb
 
-# INJECTIBLE -------------------------------------------------------------------
-EXPERIMENT_DIR = "experiments/mlp_baseline"
-WANDB_PROJECT  = "mlp-metalabel"
-# ------------------------------------------------------------------------------
+from dotenv import load_dotenv
+import os
+load_dotenv(Path(__file__).parent / ".env")
+
+from pipeline_paths import MODEL_DIR
+EXPERIMENT_DIR = str(MODEL_DIR)
+WANDB_PROJECT  = os.getenv("WANDB_PROJECT", "mlp-metalabel")
 
 # ── MODEL (must match train.py) ───────────────────────────────────────────────
 

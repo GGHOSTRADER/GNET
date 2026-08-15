@@ -40,22 +40,17 @@ from config.setting import (
     REDIS1_SIGNAL_STREAM,
 )
 from netwo_files.redis_tool import get_redis_connection
+from feat_files.canonical_features import FEATURE_NAMES
 
 # ── INJECTIBLE ────────────────────────────────────────────────────────────────
-EXPERIMENT_DIR = Path("training_mlp/experiments/mlp_baseline")
+EXPERIMENT_DIR = Path("training_mlp/strategies/MA2CrossLE/model/mlp_baseline")
 MODEL_FILE     = EXPERIMENT_DIR / "model_best.pt"
 SCALER_FILE    = EXPERIMENT_DIR / "scaler_best.pkl"
 CONFIG_FILE    = EXPERIMENT_DIR / "config.json"
 THRESHOLD      = 0.5   # sigmoid probability threshold for buy signal
 # ─────────────────────────────────────────────────────────────────────────────
 
-FEATURE_COLS = [
-    "parkinson_vol_5", "parkinson_vol_15", "parkinson_vol_30",
-    "ofi_5", "ofi_15", "ofi_30",
-    "volume_percentile", "volume_momentum",
-    "amihud_illiquidity", "vwap_distance",
-    "minutes_since_open", "is_first_last_30min", "day_of_week",
-]
+FEATURE_COLS = list(FEATURE_NAMES)
 
 
 # ── Model definition (must match training) ────────────────────────────────────

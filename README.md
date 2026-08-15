@@ -49,7 +49,7 @@ python -m netwo_files.tcp_to_redis_connection
 ```powershell
 python -m netwo_files.tcp_to_redis_ticks   # drain kernel buffer
 python -m netwo_files.tick_validator        # cast + validate + push
-python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600
+python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30
 ```
 
 ### Step 4 — Feature Pipeline
@@ -127,7 +127,7 @@ Redis: `127.0.0.1:6381` (Docker)
 | `netwo_files/tcp_to_redis_ticks.py` | Tick TCP server — drain only, zero processing |
 | `netwo_files/tick_validator.py` | Tick cast + validate + sequence check |
 | `feat_files/transformer_features.py` | 13 features, 60-bar rolling window |
-| `feat_files/volume_profile.py` | Stateful incremental POC + Value Area |
+| `feat_files/volume_profile.py` | Stateful incremental POC + Value Area + derived features, one snapshot per bar |
 | `inference/inference_engine.py` | Loads model, scales features, runs MLP, writes signal |
 | `inference/signal_tcp_server.py` | Serves trade_signal over TCP 9011 |
 | `training_mlp/study_pipeline.py` | Builds labeled dataset from raw TradeStation exports |

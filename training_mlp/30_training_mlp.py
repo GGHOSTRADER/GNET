@@ -12,24 +12,25 @@ from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 import wandb
 
-# INJECTIBLE -------------------------------------------------------------------
-DATA_FILE      = "df_features_labeled.csv"
-OUTPUT_DIR     = "experiments/mlp_baseline"
-RANDOM_SEED    = 42
-BATCH_SIZE     = 64
-EPOCHS         = 100
-LR             = 1e-3
-LR_MIN         = 1e-6
-WARMUP_EPOCHS  = 10
-N_SPLITS       = 5
-EMBARGO_BARS   = 60
-PURGE_BARS     = 20
-PATIENCE       = 15
-WEIGHT_DECAY   = 1e-2
-TEST_SIZE      = 0.10
-WANDB_PROJECT  = "mlp-metalabel"
-WANDB_RUN_NAME = "mlp-baseline"
-# ------------------------------------------------------------------------------
+from dotenv import load_dotenv
+import os
+load_dotenv(Path(__file__).parent / ".env")
+
+from pipeline_paths import FEATURES_FILE as DATA_FILE, MODEL_DIR as OUTPUT_DIR
+RANDOM_SEED    = int(os.getenv("RANDOM_SEED",    "42"))
+BATCH_SIZE     = int(os.getenv("BATCH_SIZE",     "64"))
+EPOCHS         = int(os.getenv("EPOCHS",         "100"))
+LR             = float(os.getenv("LR",           "1e-3"))
+LR_MIN         = float(os.getenv("LR_MIN",       "1e-6"))
+WARMUP_EPOCHS  = int(os.getenv("WARMUP_EPOCHS",  "10"))
+N_SPLITS       = int(os.getenv("N_SPLITS",       "5"))
+EMBARGO_BARS   = int(os.getenv("EMBARGO_BARS",   "60"))
+PURGE_BARS     = int(os.getenv("PURGE_BARS",     "20"))
+PATIENCE       = int(os.getenv("PATIENCE",       "15"))
+WEIGHT_DECAY   = float(os.getenv("WEIGHT_DECAY", "1e-2"))
+TEST_SIZE      = float(os.getenv("TEST_SIZE",    "0.10"))
+WANDB_PROJECT  = os.getenv("WANDB_PROJECT",  "mlp-metalabel")
+WANDB_RUN_NAME = os.getenv("WANDB_RUN_NAME", "mlp-baseline")
 
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)

@@ -93,6 +93,16 @@ def _print_consolidated(tf: dict, vp: dict | None) -> None:
             f"  VA=[{vp.get('value_area_low')} - {vp.get('value_area_high')}]  "
             f"TotalVol={vp.get('total_volume')}"
         )
+        print(
+            f"  poc_dist={vp.get('poc_distance')}  poc_conc={vp.get('poc_concentration')}  "
+            f"va_width={vp.get('va_width')}  va_pos={vp.get('va_position')}"
+        )
+        print(
+            f"  vol_above_poc={vp.get('vol_above_poc_ratio')}  "
+            f"entropy={vp.get('profile_entropy')}  "
+            f"kurtosis={vp.get('profile_kurtosis')}  "
+            f"poc_migration={vp.get('poc_migration')}"
+        )
 
 
 def main() -> None:

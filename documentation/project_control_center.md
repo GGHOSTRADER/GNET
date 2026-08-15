@@ -70,7 +70,7 @@ Separate high-frequency pipeline. Ingest and validation are split into two proce
 |---|---|---|---|
 | `feat_files/feat_eng_1.py` | `validated_bar` | `modSlope5` | 5 bars |
 | `feat_files/transformer_features.py` | `validated_bar` | `parkinson_vol`, `ofi`, `volume_percentile`, `volume_momentum`, `amihud`, `vwap_distance`, `session flags`, `day_of_week` | 60 bars |
-| `feat_files/volume_profile.py` | `tick_data_validated` | `poc_price`, `value_area_low`, `value_area_high`, `total_volume` | Full session |
+| `feat_files/volume_profile.py` | `tick_data_validated` | `poc_price`, `poc_volume`, `value_area_low`, `value_area_high`, `total_volume`, `poc_distance`, `poc_concentration`, `va_width`, `va_position`, `vol_above_poc_ratio`, `profile_entropy`, `profile_kurtosis`, `poc_migration` | Full session, snapshot 1s before each bar close |
 
 See [[volume_profile_design]] for volume profile design and API. See [[features_list]] for full feature reference.
 

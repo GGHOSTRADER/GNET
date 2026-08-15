@@ -3,6 +3,51 @@
 
 ---
 
+## 2026-06-15 (session 7)
+
+### Fixed feature-formula mismatch causing inference to always output prob=0
+
+- `feat_files/transformer_features.py` — `_ofi(bars, window)` and `_amihud_illiquidity(bars)` used different formulas than `training_mlp/study_pipeline.py`, which built the dataset that fit `scaler_best.pkl` and trained `model_best.pt`. The mismatch produced feature z-scores up to +25,078, saturating `sigmoid()` to exactly 0.0 on every bar — `inference_engine.py` never fired a buy signal regardless of market conditions.
+- `_ofi(bars, window)` — was `sum(up - down)` (raw, unbounded). Now `(sum(up)-sum(down)) / sum(up+down)`, bounded `[-1, 1]`, matching `study_pipeline.py`'s `order_flow_imbalance()`. Returns `0.0` if total volume is `0`.
+- `_amihud_illiquidity(bars, window=30)` — was a single-bar `|log_return| / volume` (missing price scaling and averaging). Now a 30-bar rolling mean of `|pct_change(close)| / (close * volume)`, matching `study_pipeline.py`'s `amihud_illiquidity()`. Window requirement goes from 2 bars to 31 bars (still ≤ 60, no warm-up change).
+- Updated the module docstring's "Features emitted", "Window requirements", and "Function Summary" sections (entries 4 and 7) to match.
+- `documentation/features_list.md` — updated `ofi_{5,15,30}` and `amihud_illiquidity` descriptions to the corrected formulas.
+
+---
+
+## 2026-06-14 (session 6)
+
+### Fixed SignalBridge.dll — "invalid number of parameters passed" crash on TS
+
+- `EL_files/signal_dll.cpp` — `RecvSignal()` previously took `Lpstr, int ref, double ref` out-params. EasyLanguage's `External:` declaration does not support `int ref` / `double ref` for DLL parameters, which crashed TS with "invalid number of parameters passed" (this was unverified/untested syntax from when the file was first written).
+- Redesigned to plain value-only exports (same pattern as the proven-working `BarBridge.dll`/`SendBar`): `RecvSignal()` (`int`, no params) polls the socket and caches the parsed line; `GetSignal()` (`int`), `GetProb()` (`double`), `GetSymbol()` (`Lpstr`) read back the cached values.
+- `documentation/easylanguage_signal_indicator.md` — updated EL code and "How It Works" for the new four-function interface (`ok = RecvSignal()`, then `GetSignal()`/`GetProb()`/`GetSymbol()` when `ok = 1`).
+- Requires recompiling: `cl /LD /EHsc signal_dll.cpp ws2_32.lib /Fe:SignalBridge.dll`
+
+---
+
+## 2026-06-13 (session 5)
+
+### Volume Profile — derived POC features + snapshot cadence
+
+- `feat_files/volume_profile.py` — new pure function `_compute_derived_features()` computes 8 new features from the live profile: `poc_distance`, `poc_concentration`, `va_width`, `va_position`, `vol_above_poc_ratio`, `profile_entropy`, `profile_kurtosis`, `poc_migration`. All distance-like features expressed in ticks for scale-invariance.
+- `_SessionState` gained `last_price` (current price for distance calcs) and `prev_poc_price` (persisted across snapshots, drives `poc_migration`).
+- New `snapshot_interval_s` hyperparameter (default 30, matches bar length). `_update()` still runs on every tick (O(1)); `_snapshot()` now only fires when `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1` — once per bar, 1 second before bar close. Resolves the tick-rate vs bar-rate mismatch without a second stream: the profile is session-cumulative, so missing the last second of ticks is negligible, and snapshotting early guarantees `features_volume_profile` is fresh before `features_transformer` fires for that bar.
+- `stream_volume_profile()` and `run_publish_loop()` signatures updated to take `snapshot_interval_s`; added `--snapshot-interval-s` CLI flag.
+- `VolumeProfileResult` and `_vp_result_to_redis_fields()` extended with all 8 new fields.
+- `feat_files/consolidator.py` — `_print_consolidated()` now prints all 8 derived VP fields.
+
+### Tests
+- `tests/test_volume_profile.py` — 8 new tests covering each derived feature plus snapshot gating via `monkeypatch` (61 stub ticks, `snapshot_interval_s=30` → 2 yields at `time_s=29,59`). 18/18 in this file, 111/111 full suite passing.
+
+### Documentation and diagrams updated
+- `documentation/volume_profile_design.md` — major rewrite: snapshot cadence section, updated tick inputs, full `VolumeProfileResult` table, stateful-fields table, function summary.
+- `feat_files/volume_profile_documentation.txt` — mirrored the same updates (inputs, outputs, storage, function summary), fixed long-standing `run_print_loop` → `run_publish_loop` naming bug.
+- `documentation/features_list.md`, `documentation/redis_setup.md`, `documentation/project_control_center.md`, `documentation/how_to_run_pipeline.md`, `README.md` — updated for the 8 new features, `snapshot_interval_s` CLI flag, and `features_volume_profile` now publishing once per bar instead of every tick.
+- `diagrams/volume_profile.mmd`, `diagrams/flow_tick.mmd`, `diagrams/system_overview.mmd` — added snapshot gate node and derived-features step, updated stream cadence labels.
+
+---
+
 ## 2026-05-22 (session 4)
 
 ### Inference Layer — built from scratch

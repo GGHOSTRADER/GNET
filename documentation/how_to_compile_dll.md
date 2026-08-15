@@ -26,6 +26,18 @@
 
 > This is NOT regular PowerShell — it has the compiler paths set up automatically.
 
+### ⚠️ Switch to the x86 (32-bit) toolchain
+
+TradeStation is a **32-bit process** and can only load **32-bit (x86) DLLs**. The default "Developer Command Prompt" may launch the **x64** compiler (`cl ... for x64`), which produces a DLL TS reports as `Cannot find DLL library file` (it's actually a bitness mismatch, not a missing file).
+
+If a dedicated "x86 Native Tools Command Prompt for VS" shortcut isn't available, switch the current prompt to x86 by running:
+
+```bash
+"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat"
+```
+
+(Adjust the path/version if your Visual Studio install differs.) After running this, `cl /?` should print `for x86` instead of `for x64`.
+
 ---
 
 ## Step 4 — Compile the DLLs
@@ -90,3 +102,18 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 - `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
 - `SignalBridge` is a persistent client that uses non-blocking recv — returns 0 immediately if no signal is ready, 1 when a signal arrives
 - See [[how_to_run_pipeline]] for the correct start order
+
+### Troubleshooting: "Cannot find DLL library file"
+
+This usually means the DLL exists but is the **wrong bitness** (x64 instead of x86). Check with PowerShell:
+
+```powershell
+foreach ($f in "BarBridge.dll","TickBridge.dll","SignalBridge.dll") {
+    $bytes = [System.IO.File]::ReadAllBytes($f)
+    $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
+    $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
+    "$f -> " + $(switch ($machine) { 0x014c {"x86 (32-bit)"} 0x8664 {"x64 (64-bit)"} default {"unknown"} })
+}
+```
+
+All three DLLs must report **x86 (32-bit)**. If one shows x64, recompile it after running `vcvars32.bat` (see Step 3).

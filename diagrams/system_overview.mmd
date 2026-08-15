@@ -16,10 +16,10 @@ flowchart TD
 
     REDIS -->|"validated_bar"| FE1["feat_eng_1.py - modSlope5"]
     REDIS -->|"validated_bar"| TF["transformer_features.py - 13 features"]
-    REDIS -->|"tick_data_validated"| VP["volume_profile.py - POC - Value Area"]
+    REDIS -->|"tick_data_validated"| VP["volume_profile.py - POC - Value Area - derived POC features - update per tick, snapshot per bar"]
 
     TF -->|"features_transformer"| REDIS
-    VP -->|"features_volume_profile"| REDIS
+    VP -->|"features_volume_profile - 1 per bar"| REDIS
 
     REDIS -->|"features_transformer - bottleneck"| CONSOLIDATOR["consolidator.py - waits for TF - grabs latest VP - validates symbol match - prints merged features"]
     REDIS -->|"features_volume_profile - latest"| CONSOLIDATOR
@@ -30,3 +30,15 @@ flowchart TD
     REDIS -->|"trade_signal"| SIG_SERVER["signal_tcp_server.py - port 9011"]
     SIG_SERVER -->|"symbol,signal,prob"| SIG_DLL["SignalBridge.dll - RecvSignal()"]
     SIG_DLL -->|"buy signal"| TS
+
+    LEGEND["Legend<br/>Blue: Bar pipeline<br/>Green: Tick and volume-profile pipeline<br/>Gray: Shared infrastructure"]
+
+    classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
+    classDef legendBox fill:#ffffff,stroke:#9ca3af,color:#111827,stroke-width:1px,stroke-dasharray:4 3
+
+    class BAR_DLL,BAR_SERVER,FE1,TF,INFERENCE,SIG_SERVER,SIG_DLL barPath
+    class TICK_DLL,TICK_SERVER,VALIDATOR,VP tickPath
+    class TS,REDIS,CONSOLIDATOR sharedPath
+    class LEGEND legendBox

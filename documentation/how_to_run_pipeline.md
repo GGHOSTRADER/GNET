@@ -40,11 +40,12 @@ python -m netwo_files.tcp_to_redis_ticks
 # Terminal 2 — validate ticks and push to tick_data_validated
 python -m netwo_files.tick_validator
 
-# Terminal 3 — volume profile reads from tick_data_validated
-python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600
+# Terminal 3 — volume profile reads from tick_data_validated, snapshots once per bar
+python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30
 ```
 
 > The order matters: tcp_to_redis_ticks must run before tick_validator, and tick_validator before volume_profile.
+> `--snapshot-interval-s` should match the live bar length in seconds (default 30) — the profile updates on every tick (O(1)) but only emits POC/VA/derived features 1 second before each bar close.
 
 ---
 

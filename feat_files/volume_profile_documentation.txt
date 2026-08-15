@@ -6,11 +6,13 @@ Run:  python -m feat_files.volume_profile
 
 WHAT IT DOES
 ------------
-Reads bar data from Redis1 in real time and maintains a stateful Volume Profile
-for the current trading session. On every bar close it emits an updated snapshot.
+Reads tick data from Redis1 in real time and maintains a stateful Volume Profile
+for the current trading session. The profile updates on every tick; a snapshot
+(POC, Value Area, and all derived features) is emitted once per bar, 1 second
+before bar close.
 
 Data arriving from Redis is already validated at ingestion
-(tcp_to_redis_connection.py + bar_codec.py). This file just reads and casts.
+(tick_validator.py + tick_codec.py). This file just reads and casts.
 
 Session resets automatically when date changes (new trading day).
 
@@ -30,46 +32,70 @@ never fires. Even on trend days the 15% buffer absorbs most moves.
 
 INPUTS
 ------
-Source: Redis Stream "validated_bar" (127.0.0.1:6381)
-Parser: parse_xread_to_bars() from netwo_files/bar_codec.py (decode + cast only)
+Source: Redis Stream "tick_data_validated" (127.0.0.1:6381)
+Parser: parse_xread_to_ticks() from netwo_files/tick_codec.py (decode + cast only)
 
-From each Bar:
-  bar.close    float  -- price where volume is assigned (single price per bar)
-  bar.up       int    -- market buy volume
-  bar.down     int    -- market sell volume
-  bar.symbol   str    -- ticker symbol
-  bar.date     int    -- session date (YYYMMDD, years since 1900)
-  bar.bar_num  int    -- bar sequence number
+From each Tick:
+  tick.high    float  -- price (high == low for tick data -- single price point)
+  tick.up      int    -- market buy volume at this tick
+  tick.down    int    -- market sell volume at this tick
+  tick.symbol  str    -- ticker symbol
+  tick.date    int    -- session date (YYYYMMDD)
+  tick.time_s  int    -- seconds since midnight, drives the snapshot gate
+  tick.bar_num int    -- tick sequence number
 
 Launch Parameters:
-  tick_size    float  -- price increment per level
-                         e.g. 0.25 for ES futures (default: 0.25)
-  range_ticks  int    -- number of ticks to pre-allocate at session start
-                         e.g. 400 ticks @ 0.25 = ±50 points around open
-                         (default: 400)
+  tick_size           float  -- price increment per level
+                                 e.g. 0.25 for ES futures (default: 0.25)
+  range_ticks         int    -- number of ticks to pre-allocate at session start
+                                 e.g. 400 ticks @ 0.25 = ±50 points around open
+                                 (default: 400)
+  snapshot_interval_s int    -- bar length in seconds. Snapshot fires when
+                                 tick.time_s % snapshot_interval_s == snapshot_interval_s - 1
+                                 i.e. once per bar, 1s before bar close (default: 30)
 
 Example:
-  stream_volume_profile(tick_size=0.25, range_ticks=600)
+  stream_volume_profile(tick_size=0.25, range_ticks=600, snapshot_interval_s=30)
+
+
+SNAPSHOT CADENCE
+----------------
+_update() runs on every tick -- O(1), just profile[index] += volume.
+_snapshot() (POC, Value Area, and all derived features) only runs when
+tick.time_s % snapshot_interval_s == snapshot_interval_s - 1.
+
+Missing the last second of ticks is negligible -- the profile is session-
+cumulative, so POC/VA/entropy are dominated by the full session's volume.
+Snapshotting 1s early guarantees the row is in features_volume_profile
+before features_transformer fires for that bar.
 
 
 OUTPUTS (VolumeProfileResult)
 ------------------------------
-Emitted once per bar.
+Emitted once per bar, 1 second before bar close.
 
-  symbol           str            -- ticker symbol
-  date             int            -- session date
-  bar_num          int            -- latest bar number
-  tick_size        float          -- price grid resolution used
-  range_ticks      int            -- initial pre-allocated ticks
-  price_levels     np.ndarray(L)  -- tick-spaced price grid
-  volume_at_level  np.ndarray(L)  -- volume at each level (parallel to price_levels)
-  poc_price        float          -- Point of Control: price level with most volume
-  poc_volume       float          -- volume at the POC level
-  value_area_low   float          -- VAL: lower bound of 70% value area
-  value_area_high  float          -- VAH: upper bound of 70% value area
-  total_volume     float          -- total session volume so far
-  n_bars           int            -- bars accumulated this session
-  extensions       int            -- how many times the grid was extended this session
+  symbol              str            -- ticker symbol
+  date                int            -- session date
+  bar_num             int            -- latest bar number
+  tick_size           float          -- price grid resolution used
+  range_ticks         int            -- initial pre-allocated ticks
+  price_levels        np.ndarray(L)  -- tick-spaced price grid
+  volume_at_level     np.ndarray(L)  -- volume at each level (parallel to price_levels)
+  poc_price           float          -- Point of Control: price level with most volume
+  poc_volume          float          -- volume at the POC level
+  value_area_low      float          -- VAL: lower bound of 70% value area
+  value_area_high     float          -- VAH: upper bound of 70% value area
+  total_volume        float          -- total session volume so far
+  n_bars              int            -- bars accumulated this session
+  extensions          int            -- how many times the grid was extended this session
+  poc_distance        float          -- (current_price - poc_price) / tick_size
+  poc_concentration   float          -- poc_volume / total_volume
+  va_width            float          -- (value_area_high - value_area_low) / tick_size
+  va_position         float          -- (current_price - VAL) / (VAH - VAL); 0=VAL,1=VAH
+  vol_above_poc_ratio float          -- fraction of total_volume traded above poc_price
+  profile_entropy     float          -- -sum(p*log(p)); low=concentrated, high=diffuse
+  profile_kurtosis    float          -- excess kurtosis of the volume distribution
+  poc_migration       float          -- (poc_price_now - poc_price_prev_bar) / tick_size
 
 
 STORAGE
@@ -77,11 +103,13 @@ STORAGE
 All state held in memory in _SessionState. No persistence.
 Reset on date change.
 
-  _SessionState.profile     np.ndarray  -- the live profile array (pre-allocated)
-  _SessionState.min_price   float       -- price corresponding to index 0
-  _SessionState.tick_size   float
-  _SessionState.range_ticks int         -- original range for extension calculation
-  _SessionState.extensions  int         -- extension count
+  _SessionState.profile        np.ndarray   -- the live profile array (pre-allocated)
+  _SessionState.min_price       float       -- price corresponding to index 0
+  _SessionState.tick_size       float
+  _SessionState.range_ticks     int         -- original range for extension calculation
+  _SessionState.extensions      int         -- extension count
+  _SessionState.last_price      float       -- most recent tick price (= current_price)
+  _SessionState.prev_poc_price  float|None  -- POC at previous snapshot, for poc_migration
 
 
 GRID EXTENSION RULES
@@ -124,12 +152,21 @@ _find_value_area(profile, price_levels, pct=0.70) -> (val, vah)
   np.argsort + np.cumsum. Selects levels by volume descending until 70%
   of total volume is covered. VAL/VAH = min/max price of selected levels.
 
+_compute_derived_features(profile, price_levels, poc_price, poc_volume,
+                           value_area_low, value_area_high, total_volume,
+                           current_price, tick_size, prev_poc_price) -> dict
+  Pure. Computes poc_distance, poc_concentration, va_width, va_position,
+  vol_above_poc_ratio, profile_entropy, profile_kurtosis, poc_migration.
+  Distance-like features expressed in ticks. Handles zero-volume / single
+  level edge cases (e.g. va_position defaults to 0.5 when va_range == 0).
+
 
 SESSION STATE
 --------------
 _init_session(bar, tick_size, range_ticks) -> _SessionState
   Pre-allocates profile array of range_ticks+1 zeros centered on first close.
-  Called once per session (on first bar or date change).
+  Sets last_price to the first tick's price and prev_poc_price = None.
+  Called once per session (on first tick or date change).
 
 _update(state, bar) -> None
   Incremental update. O(1) in common case:
@@ -137,21 +174,27 @@ _update(state, bar) -> None
     2. Compute integer index
     3. If within grid: profile[index] += volume
     4. If outside grid: extend via np.concatenate, then add volume
+    5. Update state.last_price to the snapped price
 
 _snapshot(state) -> VolumeProfileResult
   Derives price_levels from min_price + np.arange * tick_size.
-  Calls _find_poc and _find_value_area.
-  Returns a copy of the profile (safe for downstream use).
+  Calls _find_poc, _find_value_area, and _compute_derived_features.
+  Updates state.prev_poc_price = poc_price for the next call.
+  Returns a copy of the profile plus all derived features.
 
 
 APPLICATION
 ------------
-stream_volume_profile(tick_size, range_ticks, block_ms, count, start_id)
-  Main generator. Manages session lifecycle, calls _init_session on new day,
-  calls _update + _snapshot on every bar.
+stream_volume_profile(tick_size, range_ticks, snapshot_interval_s, block_ms, count, start_id)
+  Main generator. Manages session lifecycle, calls _init_session on new day.
+  Calls _update on every tick (always). Calls _snapshot -- and yields its
+  result -- only when tick.time_s % snapshot_interval_s == snapshot_interval_s - 1
+  (once per bar).
 
-run_print_loop(tick_size, range_ticks)
-  Smoke runner. Prints one line per bar including grid size and extension count.
+run_publish_loop(tick_size, range_ticks, snapshot_interval_s)
+  Main loop. Pushes each VolumeProfileResult to features_volume_profile via
+  xadd and prints one line per bar including grid size, extension count, and
+  all derived features.
 
 
 PORTS / DEPENDENCIES

@@ -60,11 +60,12 @@ All active streams live on Redis 1 (`127.0.0.1:6381`).
 | `tick_data_raw` | `tcp_to_redis_ticks.py` | `tick_validator.py` | 50,000 | every tick |
 | `tick_data_validated` | `tick_validator.py` | `volume_profile.py` | 50,000 | every tick |
 | `features_transformer` | `transformer_features.py` | `consolidator.py` | 1,000 | 1 per bar close |
-| `features_volume_profile` | `volume_profile.py` | `consolidator.py` | 50,000 | every tick |
+| `features_volume_profile` | `volume_profile.py` | `consolidator.py` | 50,000 | 1 per bar (1s before close) |
 
 **maxlen policy:**
-- Tick streams (`tick_data_raw`, `tick_data_validated`, `features_volume_profile`) → **50,000** entries: high-frequency, need a large buffer.
+- Tick streams (`tick_data_raw`, `tick_data_validated`) → **50,000** entries: high-frequency, need a large buffer.
 - Bar streams (`validated_bar`, `features_transformer`) → **1,000** entries: 1 per bar close, low-frequency, small buffer is enough.
+- `features_volume_profile` is now bar-frequency (snapshot gated by `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`) but keeps the larger **50,000** maxlen inherited from its tick-frequency origin — oversized but harmless.
 - All `xadd` calls use `approximate=True` so Redis trims lazily without blocking the write path.
 
 ---

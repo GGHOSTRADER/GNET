@@ -24,3 +24,6 @@
 - Metrics: accuracy, F1, AUC-ROC per fold + test
 - **Baseline**: majority-class classifier (naive fixed-rule trading analog)
 - Best fold selected by val AUC → single evaluation on test set
+
+
+

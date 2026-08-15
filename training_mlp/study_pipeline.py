@@ -1,14 +1,26 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from dotenv import load_dotenv
+import os
+import sys
+from types import SimpleNamespace
 
-# INJECTIBLE -------------------------------------------------------------------
-signal_name = "MA2CrossLE"
-OPEN_TIME   = "09:30:00"
-TRADES_FILE = r"C:\Users\g_med\Desktop\trades_30.csv"
-BARS_FILE   = r"C:\Users\g_med\Downloads\data_30.txt"
-OUTPUT_FILE = "df_features_labeled.csv"
-# ------------------------------------------------------------------------------
+load_dotenv(Path(__file__).parent / ".env")
+
+# Keep the documented ``cd training_mlp; python study_pipeline.py`` command
+# working while importing the shared live/training feature package.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+signal_name = os.getenv("SIGNAL_NAME", "MA2CrossLE")
+
+try:
+    from .pipeline_paths import INPUTS_DIR, PROCESSED_DIR, TRADES_FILE, BARS_FILE, FEATURES_FILE as OUTPUT_FILE
+except ImportError:  # Direct execution from inside training_mlp.
+    from pipeline_paths import INPUTS_DIR, PROCESSED_DIR, TRADES_FILE, BARS_FILE, FEATURES_FILE as OUTPUT_FILE
+from feat_files.canonical_features import FEATURE_NAMES, FeatureEngine
 
 # ── 1. LOADERS ────────────────────────────────────────────────────────────────
 
@@ -48,77 +60,28 @@ def metalabel(df, signal):
 
 # ── 3. FEATURE ENGINEERING ────────────────────────────────────────────────────
 
-def parkinson_vol(df, windows=(5, 15, 30)):
-    log_hl = np.log(df["High"] / df["Low"]) ** 2
-    for w in windows:
-        df[f"parkinson_vol_{w}"] = (
-            log_hl.rolling(w).sum() / (4 * w * np.log(2))
-        ).apply(np.sqrt)
-    return df
-
-
-def order_flow_imbalance(df, windows=(5, 15, 30)):
-    for w in windows:
-        net = df["Up"].rolling(w).sum() - df["Down"].rolling(w).sum()
-        tot = df["Volume"].rolling(w).sum().replace(0, np.nan)
-        df[f"ofi_{w}"] = net / tot
-    return df
-
-
-def volume_features(df):
-    df["volume_percentile"] = (
-        df["Volume"].rolling(60)
-        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
-    )
-    df["volume_momentum"] = df["Volume"].pct_change(5)
-    return df
-
-
-def amihud_illiquidity(df, window=30):
-    ret        = df["Close"].pct_change().abs()
-    dollar_vol = df["Close"] * df["Volume"]
-    df["amihud_illiquidity"] = (
-        (ret / dollar_vol.replace(0, np.nan)).rolling(window).mean()
-    )
-    return df
-
-
-def vwap_distance(df, atr_window=14):
-    df["_date"] = df["Date/Time"].dt.date
-    df["_pv"]   = df["Close"] * df["Volume"]
-    df["_vwap"] = df.groupby("_date")["_pv"].cumsum() / df.groupby("_date")["Volume"].cumsum()
-
-    hl  = df["High"] - df["Low"]
-    hpc = (df["High"] - df["Close"].shift()).abs()
-    lpc = (df["Low"]  - df["Close"].shift()).abs()
-    atr = pd.concat([hl, hpc, lpc], axis=1).max(axis=1).rolling(atr_window).mean()
-
-    df["vwap_distance"] = (df["Close"] - df["_vwap"]) / atr.replace(0, np.nan)
-    df.drop(columns=["_date", "_pv", "_vwap"], inplace=True)
-    return df
-
-
-def time_features(df):
-    market_open = df["Date/Time"].dt.normalize() + pd.Timedelta(OPEN_TIME)
-    df["minutes_since_open"] = (
-        (df["Date/Time"] - market_open).dt.total_seconds() / 60
-    ).clip(lower=0)
-    df["is_first_last_30min"] = (
-        (df["minutes_since_open"] <= 30) |
-        (df["minutes_since_open"] >= 360)
-    ).astype(int)
-    df["day_of_week"] = df["Date/Time"].dt.weekday
-    return df
-
-
 def engineer_features(bars_df):
-    df = bars_df.copy()
-    df = parkinson_vol(df)
-    df = order_flow_imbalance(df)
-    df = volume_features(df)
-    df = amihud_illiquidity(df)
-    df = vwap_distance(df)
-    df = time_features(df)
+    """Build training features with the same engine used by the live stream."""
+    df = bars_df.copy().reset_index(drop=True)
+    engine = FeatureEngine()
+    rows = []
+    timestamp_position = df.columns.get_loc("Date/Time")
+    for row in df.itertuples(index=False):
+        timestamp = row[timestamp_position]
+        bar = SimpleNamespace(
+            date=timestamp.date(),
+            time_s=timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second,
+            high=float(row.High), low=float(row.Low), close=float(row.Close),
+            up=int(row.Up), down=int(row.Down),
+        )
+        values = engine.update(bar)
+        rows.append(
+            {name: getattr(values, name) for name in FEATURE_NAMES}
+            if values is not None else {name: np.nan for name in FEATURE_NAMES}
+        )
+    feature_frame = pd.DataFrame(rows, index=df.index)
+    for name in FEATURE_NAMES:
+        df[name] = feature_frame[name]
     return df.reset_index(drop=True)
 
 
@@ -146,6 +109,7 @@ def merge_and_export(features_df, labels_df, output_path):
 # ── 5. MAIN ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     print("Loading bars...")
     df_bars    = load_bars(BARS_FILE)
 

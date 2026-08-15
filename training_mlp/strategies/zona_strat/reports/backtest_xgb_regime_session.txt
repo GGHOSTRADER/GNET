@@ -1,0 +1,57 @@
+
+-------------------------------------------------------
+  NAIVE — Take all test signals
+-------------------------------------------------------
+  First Entry                            2025-08-05 15:18:00
+  Last Exit                              2026-06-05 15:58:00
+  Days Tested                            304
+  Trades                                 2555
+  Net P&L ($, after $3.00/trade)         16,864.50
+  Commission Total ($)                   7,665.00
+  Win Rate (%)                           52.80
+  Avg Win ($)                            50.42
+  Avg Loss ($)                           -42.42
+  Expected Value ($/trade)               6.60
+  Max Drawdown (% of running equity)     87.78
+  Max Drawdown ($)                       2,947.00
+  Time Underwater (%)                    88.73
+  Avg DD Duration (trades)               17.17
+  Avg Time/Trade (s)                     512.13
+  Avg Time Between (s)                   9,772.72
+  Avg Time to Peak (trades)              8.81
+  Max Time Between Peaks (trades)        642.00
+  Max Consec Wins                        9
+  Avg Consec Wins                        2.18
+  Max Consec Losses                      8
+  Avg Consec Losses                      1.92
+-------------------------------------------------------
+
+-------------------------------------------------------
+  XGB_REGIME_SESSION FILTERED — prediction == 1 (threshold 0.46)
+-------------------------------------------------------
+  First Entry                            2025-08-05 15:18:00
+  Last Exit                              2026-05-06 15:58:00
+  Days Tested                            274
+  Trades                                 1949
+  Net P&L ($, after $3.00/trade)         14,092.00
+  Commission Total ($)                   5,847.00
+  Win Rate (%)                           54.13
+  Avg Win ($)                            49.69
+  Avg Loss ($)                           -42.87
+  Expected Value ($/trade)               7.23
+  Max Drawdown (% of running equity)     81.47
+  Max Drawdown ($)                       2,439.00
+  Time Underwater (%)                    88.30
+  Avg DD Duration (trades)               16.55
+  Avg Time/Trade (s)                     514.91
+  Avg Time Between (s)                   11,638.83
+  Avg Time to Peak (trades)              8.61
+  Max Time Between Peaks (trades)        397.00
+  Max Consec Wins                        9
+  Avg Consec Wins                        2.25
+  Max Consec Losses                      9
+  Avg Consec Losses                      1.90
+-------------------------------------------------------
+
+  Trades taken : 1,949 / 2,555 (76.3%)
+  Net P&L gain from filter: $-2,772.50

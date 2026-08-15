@@ -1,26 +1,29 @@
 flowchart TD
 
     REDIS_TICK[("Redis Stream - tick_data_validated")]
-    XREAD["r.xread() - block=100ms - count=500"]
+    XREAD["r.xread() - block=250ms - count=200"]
     PARSE["parse_xread_to_ticks() - tick_codec.py - decode + cast only - already validated by tick_validator.py"]
 
     FIRST{"first tick of session?"}
     INIT["_init_session() - pre-allocate profile array of zeros - range_ticks + 1 levels - centered on first tick.high"]
 
-    UPDATE["_update() - snap tick.high to tick grid - compute index - O(1) common case"]
+    UPDATE["_update() - snap tick.high to tick grid - compute index - O(1) common case - track last_price"]
     BOUNDS{"index within grid?"}
     ADD["profile[index] += volume - single C op"]
 
     EXTEND_LOW["extend low - prepend zeros - max(extension - gap) ticks - min_price shifts down - extensions += 1"]
     EXTEND_HIGH["extend high - append zeros - max(extension - gap) ticks - extensions += 1"]
 
+    GATE{"tick.time_s % snapshot_interval_s == snapshot_interval_s - 1 ?"}
+
     SNAPSHOT["_snapshot() - derive price_levels from min_price + arange - profile.copy()"]
     POC["_find_poc() - np.argmax"]
     VA["_find_value_area() - np.argsort + np.cumsum - 70 percent value area"]
+    DERIVED["_compute_derived_features() - poc_distance - poc_concentration - va_width - va_position - vol_above_poc_ratio - profile_entropy - profile_kurtosis - poc_migration (vs prev_poc_price)"]
 
-    RESULT["VolumeProfileResult - symbol - date - bar_num - tick_size - range_ticks - poc_price - poc_volume - value_area_low - value_area_high - total_volume"]
+    RESULT["VolumeProfileResult - symbol - date - bar_num - tick_size - range_ticks - poc_price - poc_volume - value_area_low - value_area_high - total_volume - poc_distance - poc_concentration - va_width - va_position - vol_above_poc_ratio - profile_entropy - profile_kurtosis - poc_migration"]
 
-    REDIS_OUT[("Redis Stream - features_volume_profile")]
+    REDIS_OUT[("Redis Stream - features_volume_profile - one entry per bar")]
 
     REDIS_TICK -->|"XREAD validated ticks"| XREAD
     XREAD --> PARSE
@@ -34,9 +37,14 @@ flowchart TD
     BOUNDS -->|"above ceiling"| EXTEND_HIGH
     EXTEND_LOW --> ADD
     EXTEND_HIGH --> ADD
-    ADD --> SNAPSHOT
+    ADD --> GATE
+    GATE -->|"no - wait for next tick"| XREAD
+    GATE -->|"yes - 1s before bar close"| SNAPSHOT
     SNAPSHOT --> POC
     SNAPSHOT --> VA
+    POC --> DERIVED
+    VA --> DERIVED
+    DERIVED -->|"update prev_poc_price"| RESULT
     POC -->|"poc_price - poc_volume"| RESULT
     VA -->|"val - vah"| RESULT
     RESULT -->|"xadd scalar fields"| REDIS_OUT
@@ -46,12 +54,13 @@ flowchart TD
         PARSE
     end
 
-    subgraph APPLICATION ["Application - session lifecycle"]
+    subgraph APPLICATION ["Application - session lifecycle + snapshot cadence"]
         FIRST
         INIT
+        GATE
     end
 
-    subgraph DOMAIN ["Domain - Stateful Profile - O(1) per tick"]
+    subgraph DOMAIN ["Domain - Stateful Profile - update O(1) per tick, snapshot once per bar"]
         UPDATE
         BOUNDS
         ADD
@@ -60,4 +69,5 @@ flowchart TD
         SNAPSHOT
         POC
         VA
+        DERIVED
     end

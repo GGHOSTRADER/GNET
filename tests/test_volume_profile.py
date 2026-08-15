@@ -31,6 +31,14 @@ Test Index
   [08] test_profile_session_resets_on_date_change  -- n_bars resets to 1 on new date
   [09] test_snapshot_price_levels_are_tick_spaced  -- price_levels increment by tick_size
   [10] test_snapshot_arrays_are_parallel           -- price_levels and volume_at_level same length
+  [11] test_poc_concentration_single_level         -- single-level profile has concentration == 1.0
+  [12] test_poc_distance_sign_and_scale            -- poc_distance is (price-poc)/tick_size, signed
+  [13] test_va_position_within_value_area          -- va_position in [0,1] when price inside VA
+  [14] test_vol_above_poc_ratio_all_above          -- ratio == 1.0 when all extra volume is above POC
+  [15] test_profile_entropy_zero_for_single_level  -- single level has zero entropy (no spread)
+  [16] test_poc_migration_zero_on_first_snapshot   -- poc_migration == 0.0 with no prior snapshot
+  [17] test_poc_migration_tracks_poc_shift         -- poc_migration reflects POC shift between snapshots
+  [18] test_snapshot_gated_by_snapshot_interval    -- stream_volume_profile yields once per bar window
 """
 
 import pytest
@@ -43,6 +51,7 @@ from feat_files.volume_profile import (
     _init_session,
     _update,
     _snapshot,
+    stream_volume_profile,
 )
 
 
@@ -194,3 +203,104 @@ def test_snapshot_arrays_are_parallel():
     _update(state, t)
     vp = _snapshot(state)
     assert len(vp.price_levels) == len(vp.volume_at_level)
+
+
+# [11]
+def test_poc_concentration_single_level():
+    """Positive — a single occupied level has 100% of volume at the POC."""
+    t = make_stub(price=5000.0, bar_num=1, volume=100)
+    state = init_and_update(t)
+    vp = _snapshot(state)
+    assert vp.poc_concentration == pytest.approx(1.0)
+
+
+# [12]
+def test_poc_distance_sign_and_scale():
+    """Positive — poc_distance is (current_price - poc_price) / tick_size."""
+    t1 = make_stub(price=5000.0,  bar_num=1, volume=200)  # heavy -> becomes POC
+    t2 = make_stub(price=5000.50, bar_num=2, volume=50)   # last tick -> current_price
+    state = init_and_update(t1, t2, tick_size=0.25)
+    vp = _snapshot(state)
+    assert vp.poc_price == pytest.approx(5000.0, abs=0.01)
+    assert vp.poc_distance == pytest.approx(2.0)  # (5000.50 - 5000.0) / 0.25
+
+
+# [13]
+def test_va_position_within_value_area():
+    """Positive — va_position falls in [0, 1] when current_price is inside the value area."""
+    t1 = make_stub(price=5000.00, bar_num=1, volume=400)  # -> becomes VAL and POC
+    t2 = make_stub(price=5000.50, bar_num=2, volume=400)  # -> becomes VAH
+    t3 = make_stub(price=5000.25, bar_num=3, volume=60)   # last tick -> current_price (midpoint)
+    state = init_and_update(t1, t2, t3, tick_size=0.25)
+    vp = _snapshot(state)
+    assert vp.value_area_low  == pytest.approx(5000.00)
+    assert vp.value_area_high == pytest.approx(5000.50)
+    assert vp.va_position == pytest.approx(0.5)
+
+
+# [14]
+def test_vol_above_poc_ratio_when_extra_volume_above():
+    """Positive — vol_above_poc_ratio equals the fraction of volume above the POC level."""
+    t1 = make_stub(price=5000.00, bar_num=1, volume=100)  # POC
+    t2 = make_stub(price=5000.50, bar_num=2, volume=50)   # above POC
+    state = init_and_update(t1, t2, tick_size=0.25)
+    vp = _snapshot(state)
+    expected = (vp.total_volume - vp.poc_volume) / vp.total_volume
+    assert vp.vol_above_poc_ratio == pytest.approx(expected)
+    assert vp.vol_above_poc_ratio == pytest.approx(50.0 / 150.0)
+
+
+# [15]
+def test_profile_entropy_zero_for_single_level():
+    """Positive — a single occupied level has zero entropy (no spread)."""
+    t = make_stub(price=5000.0, bar_num=1, volume=100)
+    state = init_and_update(t)
+    vp = _snapshot(state)
+    assert vp.profile_entropy == pytest.approx(0.0)
+
+
+# [16]
+def test_poc_migration_zero_on_first_snapshot():
+    """Positive — poc_migration is 0.0 when there is no prior snapshot."""
+    t = make_stub(price=5000.0, bar_num=1, volume=100)
+    state = init_and_update(t)
+    vp = _snapshot(state)
+    assert vp.poc_migration == pytest.approx(0.0)
+
+
+# [17]
+def test_poc_migration_tracks_poc_shift():
+    """Positive — poc_migration reflects the POC shift between consecutive snapshots."""
+    t1 = make_stub(price=5000.0, bar_num=1, volume=200)
+    state = init_and_update(t1, tick_size=0.25)
+    vp1 = _snapshot(state)
+    assert vp1.poc_price == pytest.approx(5000.0, abs=0.01)
+
+    # New tick gets a much larger volume 4 ticks above -> POC shifts to 5001.00
+    _update(state, make_stub(price=5001.00, bar_num=2, volume=500))
+    vp2 = _snapshot(state)
+    assert vp2.poc_price == pytest.approx(5001.00, abs=0.01)
+    assert vp2.poc_migration == pytest.approx(4.0)  # (5001.00 - 5000.0) / 0.25
+
+
+# [18]
+def test_snapshot_gated_by_snapshot_interval(monkeypatch):
+    """Positive — stream_volume_profile yields once per bar (time_s % interval == interval - 1)."""
+    ticks = [make_stub(price=5000.0, bar_num=i, volume=10, date=1260125)
+             for i in range(61)]
+    for i, t in enumerate(ticks):
+        ticks[i] = TickStub(
+            symbol=t.symbol, date=t.date, time_s=i,
+            high=t.high, low=t.low, up=t.up, down=t.down, bar_num=t.bar_num,
+        )
+
+    monkeypatch.setattr(
+        "feat_files.volume_profile.stream_ticks_from_redis",
+        lambda **kwargs: iter(ticks),
+    )
+
+    results = list(stream_volume_profile(tick_size=0.25, range_ticks=40, snapshot_interval_s=30))
+
+    # time_s = 0..60 -> fires at time_s = 29 and 59 -> 2 snapshots
+    assert len(results) == 2
+    assert [vp.n_bars for vp in results] == [30, 60]
