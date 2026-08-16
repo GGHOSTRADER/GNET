@@ -22,10 +22,10 @@ flowchart TD
     end
 
     subgraph DEPLOY[Step 4 - Deployment]
-        IE[inference_engine.py]
+        IE[strategy_router.py]
     end
 
-    ARTIFACTS[(model_best.pt\nscaler_best.pkl)]
+    ARTIFACTS[(model_best.pt\nscaler_best.pkl\nconfig.json)]
 
     RAW --> SP
     SP --> DF[(df_features_labeled.csv)]
@@ -109,7 +109,7 @@ This script:
 3. Runs 5-fold purged-embargo walk-forward cross-validation
 4. Trains an MLP on each fold, saves per-fold weights and scalers
 5. Selects the best fold by validation AUC
-6. Saves `model_best.pt` and `scaler_best.pkl` to `experiments/mlp_baseline/`
+6. Saves `model_best.pt` and `scaler_best.pkl` under the configured strategy model directory
 
 Expected output:
 ```
@@ -121,7 +121,7 @@ Folds: 100%|████████| 5/5
   Fold 5  acc=0.5834 f1=0.5935 auc=0.6101
 
 Best fold : 4  (val AUC 0.6386)
-All artifacts saved to: training_mlp/experiments/mlp_baseline
+Default artifact directory: `training_mlp/strategies/MA2CrossLE/model/mlp_baseline`
 ```
 
 > Requires a W&B account for experiment tracking. To skip W&B, comment out the `wandb.*` calls.
@@ -131,7 +131,7 @@ All artifacts saved to: training_mlp/experiments/mlp_baseline
 | Parameter | Default | Description |
 |---|---|---|
 | `DATA_FILE` | `"df_features_labeled.csv"` | Input dataset |
-| `OUTPUT_DIR` | `"experiments/mlp_baseline"` | Where to save artifacts |
+| `MODEL_DIR` | `"strategies/MA2CrossLE/model/mlp_baseline"` | Default artifact directory from `pipeline_paths.py` |
 | `EPOCHS` | `100` | Max training epochs per fold |
 | `BATCH_SIZE` | `64` | Mini-batch size |
 | `LR` | `1e-3` | Peak learning rate |
@@ -165,7 +165,7 @@ Baseline acc : 0.5058
 Test acc     : 0.5822  (↑ beats baseline)
 ```
 
-Results are saved to `experiments/mlp_baseline/results_test.json`.
+Results are saved to the configured strategy model directory as `results_test.json`.
 
 ---
 
@@ -174,17 +174,19 @@ Results are saved to `experiments/mlp_baseline/results_test.json`.
 Once satisfied with the test results, the trained artifacts are ready to use in the live pipeline:
 
 ```bash
-# From project root
-python -m inference.inference_engine
+# From project root, after Redis and the feature service are running
+python -m inference.strategy_router
 ```
 
-`inference_engine.py` loads `training_mlp/experiments/mlp_baseline/model_best.pt` and `scaler_best.pkl` at startup. No further steps needed — see [[how_to_run_pipeline]] for the full live system startup order.
+`strategy_router.py` loads the mapped strategy's `model_best.pt`,
+`scaler_best.pkl`, and `config.json` once at startup. It invokes them only for
+matching trade candidates. See [[how_to_run_pipeline]] for live startup.
 
 ---
 
 ## Artifacts Produced
 
-All saved to `training_mlp/experiments/mlp_baseline/`:
+By default, all are saved to `training_mlp/strategies/MA2CrossLE/model/mlp_baseline/`:
 
 | File | Description |
 |---|---|

@@ -9,11 +9,13 @@ flowchart TD
     LEGEND_BAR["Blue: Bar pipeline"]
     LEGEND_TICK["Green: Tick and volume-profile pipeline"]
     LEGEND_SHARED["Gray: Shared infrastructure"]
+    LEGEND_STRATEGY["Purple: Strategy candidate and decision path"]
 
     TS([TradeStation])
     LEGEND_BAR ~~~ LEGEND_TICK
     LEGEND_TICK ~~~ LEGEND_SHARED
-    LEGEND_SHARED ~~~ TS
+    LEGEND_SHARED ~~~ LEGEND_STRATEGY
+    LEGEND_STRATEGY ~~~ TS
 
     TS -->|"bar close"| BAR_DLL["BarBridge.dll - port 9009"]
     TS -->|"every tick"| TICK_DLL["TickBridge.dll - port 9010"]
@@ -21,39 +23,47 @@ flowchart TD
     BAR_DLL -->|"CSV"| BAR_SERVER["tcp_to_redis_connection.py - parse - validate - encode"]
     TICK_DLL -->|"CSV"| TICK_SERVER["tcp_to_redis_ticks.py - raw passthrough only"]
 
-    BAR_SERVER -->|"validated_bar"| REDIS[("Redis - Docker port 6381 - streams: validated_bar - tick_data_raw - tick_data_validated - features_transformer - features_volume_profile - trade_signal")]
+    BAR_SERVER -->|"validated_bar"| REDIS[("Redis - Docker port 6381 - bar, tick, feature, candidate, and decision streams")]
     TICK_SERVER -->|"tick_data_raw"| REDIS
 
     REDIS -->|"tick_data_raw"| VALIDATOR["tick_validator.py - cast - validate"]
     VALIDATOR -->|"tick_data_validated"| REDIS
 
-    REDIS -->|"validated_bar"| FE1["feat_eng_1.py - modSlope5"]
     REDIS -->|"validated_bar"| TF["transformer_features.py - Redis orchestration and publishing"]
     TF -->|"in-process library call"| CANONICAL["canonical_features.py - FeatureEngine - 13 MA formulas"]
     CANONICAL -.->|"13 FeatureValues returned"| TF
-    REDIS -->|"tick_data_validated"| VP["volume_profile.py - POC - Value Area - derived POC features - update per tick, snapshot per bar"]
+    REDIS -->|"tick_data_validated"| VP["volume_profile.py - update per tick - snapshots on qualifying final-second ticks"]
 
     TF -->|"features_transformer"| REDIS
-    VP -->|"features_volume_profile - 1 per bar"| REDIS
+    VP -->|"features_volume_profile - qualifying final-second ticks"| REDIS
 
-    REDIS -->|"features_transformer - bottleneck"| CONSOLIDATOR["consolidator.py - waits for TF - grabs latest VP - validates symbol match - prints merged features"]
-    REDIS -->|"features_volume_profile - latest"| CONSOLIDATOR
+    TS -->|"only when a primary strategy proposes a trade"| STRATEGY_DLL["StrategyBridge.dll - shared port 9012"]
+    STRATEGY_DLL -->|"strategy + instance + GUID + bar identity"| CANDIDATE_SERVER["candidate_tcp_server.py - validate and publish"]
+    CANDIDATE_SERVER -->|"trade_candidates"| REDIS
 
-    REDIS -->|"features_transformer"| INFERENCE["inference_engine.py - scale - MLP forward pass - sigmoid threshold"]
+    REDIS -->|"exact features plus durable candidate group"| ROUTER["strategy_router.py - exact bar match - model selection - inference - ACK after decision publish"]
     TRAINING["training_mlp - offline MA training"] -->|"produces"| ARTIFACTS["MA2CrossLE model artifacts - model_best.pt - scaler_best.pkl - config.json"]
-    ARTIFACTS -->|"loaded at inference startup"| INFERENCE
-    INFERENCE -->|"trade_signal"| REDIS
+    ARTIFACTS -->|"referenced by"| REGISTRY["model_registry directories - enabled - threshold - device"]
+    UI["Local registry page - 127.0.0.1:9020"] -->|"validated configuration edits"| REGISTRY
+    REGISTRY -->|"enabled models loaded once at startup"| ROUTER
+    ROUTER -->|"trade_decisions - approved or rejected"| REDIS
 
-    REDIS -->|"trade_signal"| SIG_SERVER["signal_tcp_server.py - port 9011"]
-    SIG_SERVER -->|"symbol,signal,prob"| SIG_DLL["SignalBridge.dll - RecvSignal()"]
-    SIG_DLL -->|"buy signal"| TS
+    REDIS -->|"durable decision consumer group"| SIG_SERVER["signal_tcp_server.py - port 9011 - ACK after TCP delivery"]
+    SIG_SERVER -->|"correlated instance decision"| SIG_DLL["SignalBridge.dll - per-instance queues"]
+    SIG_DLL -->|"matching candidate decision"| TS
 
     classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
-    class BAR_DLL,BAR_SERVER,FE1,TF,CANONICAL,TRAINING,ARTIFACTS,INFERENCE,SIG_SERVER,SIG_DLL barPath
+    classDef strategyPath fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
+    WATCHDOG["Windows Task Scheduler - ON or OFF - watchdog restarts failed Python services"] -.-> ROUTER
+    WATCHDOG -.-> TF
+
+    class BAR_DLL,BAR_SERVER,TF,CANONICAL,TRAINING,ARTIFACTS,REGISTRY barPath
     class TICK_DLL,TICK_SERVER,VALIDATOR,VP tickPath
-    class TS,REDIS,CONSOLIDATOR sharedPath
+    class TS,REDIS,UI,WATCHDOG sharedPath
+    class STRATEGY_DLL,CANDIDATE_SERVER,ROUTER,SIG_SERVER,SIG_DLL strategyPath
     class LEGEND_BAR barPath
     class LEGEND_TICK tickPath
     class LEGEND_SHARED sharedPath
+    class LEGEND_STRATEGY strategyPath

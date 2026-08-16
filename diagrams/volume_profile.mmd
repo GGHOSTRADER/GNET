@@ -1,5 +1,8 @@
 ---
 title: GNET Volume-Profile Internals
+config:
+  themeCSS: |
+    .titleText { font-size: 30px !important; font-weight: 700 !important; }
 ---
 flowchart TD
 
@@ -74,3 +77,8 @@ flowchart TD
         VA
         DERIVED
     end
+
+    classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
+    class XREAD,PARSE,FIRST,INIT,UPDATE,BOUNDS,ADD,EXTEND_LOW,EXTEND_HIGH,GATE,SNAPSHOT,POC,VA,DERIVED,RESULT tickPath
+    class REDIS_TICK,REDIS_OUT sharedPath

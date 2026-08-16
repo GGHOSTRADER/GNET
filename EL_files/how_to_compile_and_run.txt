@@ -1,6 +1,11 @@
 HOW TO COMPILE AND RUN THE TRADESTATION DLL
 =============================================
 
+LEGACY NOTE: this file covers BarBridge.dll only. The current pipeline uses
+BarBridge.dll, TickBridge.dll, StrategyBridge.dll, and SignalBridge.dll.
+Use documentation/how_to_compile_dll.md for the current x86 build commands and
+documentation/how_to_run_pipeline.md for the complete startup order.
+
 
 STEP 1 - Create the Indicator in TradeStation
 -----------------------------------------------

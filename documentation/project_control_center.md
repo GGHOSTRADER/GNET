@@ -9,9 +9,10 @@
 | 2 | Docker fires Redis container | Docker Desktop | [[redis_setup]] |
 | 3 | EasyLanguage calls DLL → binds TCP → exports data | [[easylanguage_bar_indicator]] / `dll.cpp` / `BarBridge.dll` | [[bar_data_contract]] |
 | 4 | Python TCP server receives, parses, validates, pushes to Redis | `tcp_to_redis_connection.py` | [[bar_data_contract]] |
-| 5 | Feature pipelines read from Redis and compute | `feat_eng_1.py` / `transformer_features.py` / `volume_profile.py` | [[features_list]] |
-| 6 | Inference engine scales features, runs MLP, writes trade signal | `inference/inference_engine.py` | [[features_list]] |
-| 7 | Signal TCP server forwards signal to TradeStation | `inference/signal_tcp_server.py` / `SignalBridge.dll` | — |
+| 5 | Feature pipelines read from Redis and compute | `transformer_features.py` / `volume_profile.py` | [[features_list]] |
+| 6 | A strategy sends a candidate only when its primary signal fires | `StrategyBridge.dll` / `candidate_tcp_server.py` | [[strategy_candidate_integration]] |
+| 7 | Router joins the exact feature bar, selects the model, and writes a decision | `inference/strategy_router.py` | [[features_list]] |
+| 8 | Decision TCP server returns the correlated result to the correct strategy window | `signal_tcp_server.py` / `SignalBridge.dll` | [[strategy_candidate_integration]] |
 
 ---
 
@@ -68,7 +69,6 @@ Separate high-frequency pipeline. Ingest and validation are split into two proce
 
 | File | Reads From | Features | Window |
 |---|---|---|---|
-| `feat_files/feat_eng_1.py` | `validated_bar` | `modSlope5` | 5 bars |
 | `feat_files/transformer_features.py` | `validated_bar` | `parkinson_vol`, `ofi`, `volume_percentile`, `volume_momentum`, `amihud`, `vwap_distance`, `session flags`, `day_of_week` | 60 bars |
 | `feat_files/volume_profile.py` | `tick_data_validated` | `poc_price`, `poc_volume`, `value_area_low`, `value_area_high`, `total_volume`, `poc_distance`, `poc_concentration`, `va_width`, `va_position`, `vol_above_poc_ratio`, `profile_entropy`, `profile_kurtosis`, `poc_migration` | Full session, snapshot 1s before each bar close |
 
@@ -78,17 +78,23 @@ See [[volume_profile_design]] for volume profile design and API. See [[features_
 
 ### Inference Layer
 
-Reads engineered features from Redis, runs the pretrained MLP, and sends buy signals back to TradeStation.
+Features continue to publish every bar. Models run only after a primary
+strategy candidate arrives. The router requires an exact symbol, date, time,
+and bar-number match; it never substitutes the latest feature record.
 
 | File | Role |
 |---|---|
-| `inference/inference_engine.py` | Reads `features_transformer`, scales with `scaler_best.pkl`, runs `model_best.pt`, writes `signal` + `prob` to `trade_signal` |
-| `inference/signal_tcp_server.py` | Reads `trade_signal`, serves one persistent TCP connection on port 9011, sends `symbol,signal,prob\n` per bar |
-| `EL_files/signal_dll.cpp` | C++ Win32 DLL source — connects to port 9011, non-blocking `RecvSignal()` EL calls each bar close |
+| `EL_files/strategy_dll.cpp` | Shared candidate DLL source — all strategy windows send through port 9012 |
+| `inference/candidate_tcp_server.py` | Validates candidate payloads and writes `trade_candidates` |
+| `inference/strategy_router.py` | Joins candidates to exact features, selects the configured model, writes `trade_decisions` |
+| `inference/model_registry.py` | Discovers and validates enabled models from `model_registry/*/registry.json` |
+| `gnet_ui/server.py` | Optional local registry page on `127.0.0.1:9020`; outside the inference path |
+| `inference/signal_tcp_server.py` | Reads `trade_decisions` and forwards correlated decisions on port 9011 |
+| `EL_files/signal_dll.cpp` | Queues decisions by strategy ID for non-blocking TradeStation polling |
 | `EL_files/SignalBridge.dll` | Compiled DLL loaded by TradeStation |
-| `training_mlp/experiments/mlp_baseline/` | Trained artifacts — `model_best.pt`, `scaler_best.pkl`, `config.json` |
+| `training_mlp/strategies/MA2CrossLE/model/mlp_baseline/` | MA model, scaler, and configuration loaded once by the router |
 
-Signal protocol: `symbol,signal,prob\n` — `signal=1` means buy, `signal=0` means no trade.
+Candidate and decision schemas are documented in [[strategy_candidate_integration]].
 
 ---
 
@@ -97,7 +103,6 @@ Signal protocol: `symbol,signal,prob\n` — `signal=1` means buy, `signal=0` mea
 | File | Role |
 |---|---|
 | `tests/test_tcp_to_redis_connection.py` | Tests for bar parsing, casting, contract validation |
-| `tests/test_feat.py` | Tests for `modSlope5` feature function |
 
 ---
 
@@ -107,19 +112,21 @@ Signal protocol: `symbol,signal,prob\n` — `signal=1` means buy, `signal=0` mea
 |---|---|---|
 | `9009` | Bar TCP server — TradeStation bar DLL connects here | TS → Python |
 | `9010` | Tick TCP server — TradeStation tick DLL connects here | TS → Python |
-| `9011` | Signal TCP server — TradeStation signal DLL connects here | Python → TS |
+| `9011` | Decision TCP server — TradeStation SignalBridge connects here | Python → TS |
+| `9012` | Candidate TCP server — shared StrategyBridge connects here | TS → Python |
 | `6381` | Redis — Docker container (maps internal `6379` → Windows `6381`) | local |
 
 ## Redis Streams
 
 | Stream | Written By | Read By | maxlen |
 |---|---|---|---|
-| `validated_bar` | `tcp_to_redis_connection.py` | `feat_eng_1.py`, `transformer_features.py` | 1,000 |
+| `validated_bar` | `tcp_to_redis_connection.py` | `transformer_features.py` | 1,000 |
 | `tick_data_raw` | `tcp_to_redis_ticks.py` | `tick_validator.py` | 50,000 |
 | `tick_data_validated` | `tick_validator.py` | `volume_profile.py` | 50,000 |
-| `features_transformer` | `transformer_features.py` | `consolidator.py`, `inference_engine.py` | 1,000 |
-| `features_volume_profile` | `volume_profile.py` | `consolidator.py` | 50,000 |
-| `trade_signal` | `inference_engine.py` | `signal_tcp_server.py` | 500 |
+| `features_transformer` | `transformer_features.py` | `strategy_router.py`; optional `consolidator.py` debugger | 1,000 |
+| `features_volume_profile` | `volume_profile.py` | optional `consolidator.py` debugger only | 50,000 |
+| `trade_candidates` | `candidate_tcp_server.py` | `strategy_router.py` | 5,000 |
+| `trade_decisions` | `strategy_router.py` | `signal_tcp_server.py` | 5,000 |
 
 ---
 
@@ -129,7 +136,7 @@ Signal protocol: `symbol,signal,prob\n` — `signal=1` means buy, `signal=0` mea
 ```bash
 .\launch.ps1
 ```
-Starts Docker Desktop, waits for engine, starts Redis container, opens TradeStation.
+Starts Docker Desktop and Redis, launches all nine services in consumer-first order, then opens TradeStation and the registry page after the TCP listeners are ready.
 
 ### 2. Start the Bar TCP Server
 ```bash
@@ -153,19 +160,23 @@ python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600
 python -m feat_files.transformer_features
 ```
 
-### 5. Start the Inference Layer (2 terminals)
+### 5. Start Candidate Routing (3 terminals)
 ```bash
-# Terminal 1 — runs model, writes to trade_signal
-python -m inference.inference_engine
+# Terminal 1 — receives all strategy candidates on shared port 9012
+python -m inference.candidate_tcp_server
 
-# Terminal 2 — serves signal over TCP to TradeStation
+# Terminal 2 — exact feature join and model inference
+python -m inference.strategy_router
+
+# Terminal 3 — serves correlated decisions to TradeStation
 python -m inference.signal_tcp_server
 ```
 
 ### 6. Apply EasyLanguage Indicators in TradeStation
 - Bar chart: [[easylanguage_bar_indicator]] → `BarBridge.dll` → port 9009
 - Tick chart: [[easylanguage_tick_indicator]] → `TickBridge.dll` → port 9010
-- Signal receiver: [[easylanguage_signal_indicator]] → `SignalBridge.dll` → port 9011
+- Candidate sender: [[strategy_candidate_integration]] → `StrategyBridge.dll` → port 9012
+- Decision receiver: [[easylanguage_signal_indicator]] → `SignalBridge.dll` → port 9011
 
 > Need to compile a DLL? See [[how_to_compile_dll]].
 
@@ -178,11 +189,13 @@ python -m inference.signal_tcp_server
 | [[bar_data_contract]] | All 11 bar fields, types, invariants |
 | [[tick_data_contract]] | All 8 tick fields, types, invariants |
 | [[redis_setup]] | Redis setup and Docker commands |
-| [[how_to_compile_dll]] | How to compile `BarBridge.dll`, `TickBridge.dll`, `SignalBridge.dll` |
+| [[how_to_compile_dll]] | How to compile all four TradeStation DLLs |
 | [[how_to_run_pipeline]] | Detailed pipeline launch instructions |
 | [[volume_profile_design]] | Volume profile design and API |
 | [[features_list]] | All engineered features reference table |
 | [[easylanguage_signal_indicator]] | EasyLanguage code to receive signals from `SignalBridge.dll` |
+| [[strategy_candidate_integration]] | Candidate payload, exact matching, and per-instance decision API |
+| [[model_registry_ui]] | Directory-backed model discovery and local browser configuration |
 
 ---
 

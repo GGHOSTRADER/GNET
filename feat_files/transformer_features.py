@@ -4,7 +4,8 @@ transformer_features_pipeline.py
 
 Clean architecture transformer feature pipeline (Redis -> Bars -> Features).
 
-Mirrors feat_eng_1.py in structure. No pandas, no talib, no CSV.
+Uses the same clean Redis-to-domain structure as the rest of the live pipeline.
+No pandas, no talib, no CSV.
 All features computed from a rolling deque of typed Bars read from Redis1.
 
 Layering

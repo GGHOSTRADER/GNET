@@ -58,9 +58,14 @@ cl /LD /EHsc dll.cpp ws2_32.lib /Fe:BarBridge.dll
 cl /LD /EHsc tick_dll.cpp ws2_32.lib /Fe:TickBridge.dll
 ```
 
-### SignalBridge.dll — receives trade signals from Python to TradeStation (port 9011)
+### SignalBridge.dll — receives correlated decisions from Python (port 9011)
 ```bash
 cl /LD /EHsc signal_dll.cpp ws2_32.lib /Fe:SignalBridge.dll
+```
+
+### StrategyBridge.dll — sends candidates from every strategy window (port 9012)
+```bash
+cl /LD /EHsc strategy_dll.cpp ws2_32.lib ole32.lib /Fe:StrategyBridge.dll
 ```
 
 You should see output ending with:
@@ -92,7 +97,8 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 |---|---|---|---|---|
 | `BarBridge.dll` | `dll.cpp` | `9009` | TS → Python | `SendBar()` |
 | `TickBridge.dll` | `tick_dll.cpp` | `9010` | TS → Python | `SendTick()` |
-| `SignalBridge.dll` | `signal_dll.cpp` | `9011` | Python → TS | `RecvSignal()` |
+| `SignalBridge.dll` | `signal_dll.cpp` | `9011` | Python → TS | `RecvDecision(instance_id)` |
+| `StrategyBridge.dll` | `strategy_dll.cpp` | `9012` | TS → Python | `SendCandidate()` / `GetLastCandidateId()` |
 
 ---
 
@@ -100,7 +106,7 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 
 - All DLLs connect to `127.0.0.1` — Python processes must be running before TradeStation loads the DLL
 - `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
-- `SignalBridge` is a persistent client that uses non-blocking recv — returns 0 immediately if no signal is ready, 1 when a signal arrives
+- `SignalBridge` queues decisions by strategy ID and uses non-blocking recv — each window can retrieve only its own decision
 - See [[how_to_run_pipeline]] for the correct start order
 
 ### Troubleshooting: "Cannot find DLL library file"
@@ -108,7 +114,7 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 This usually means the DLL exists but is the **wrong bitness** (x64 instead of x86). Check with PowerShell:
 
 ```powershell
-foreach ($f in "BarBridge.dll","TickBridge.dll","SignalBridge.dll") {
+foreach ($f in "BarBridge.dll","TickBridge.dll","SignalBridge.dll","StrategyBridge.dll") {
     $bytes = [System.IO.File]::ReadAllBytes($f)
     $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
     $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
@@ -116,4 +122,4 @@ foreach ($f in "BarBridge.dll","TickBridge.dll","SignalBridge.dll") {
 }
 ```
 
-All three DLLs must report **x86 (32-bit)**. If one shows x64, recompile it after running `vcvars32.bat` (see Step 3).
+All four DLLs must report **x86 (32-bit)**. If one shows x64, recompile it after running `vcvars32.bat` (see Step 3).

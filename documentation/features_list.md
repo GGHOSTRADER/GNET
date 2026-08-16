@@ -19,7 +19,7 @@ All features are computed in `feat_files/transformer_features.py` from a 60-bar 
 
 ## MLP Model Input
 
-The inference model (`inference/inference_engine.py`) uses all 13 features above in this exact order:
+The MA model loaded by `inference/strategy_router.py` uses all 13 features above in this exact order:
 
 ```python
 FEATURE_COLS = [
@@ -35,7 +35,7 @@ Output: `signal=1` (buy) when `sigmoid(logit) >= THRESHOLD` (default 0.5).
 
 ## Volume Profile Features (not used by current MLP)
 
-Computed by `feat_files/volume_profile.py` from tick data. `_update()` runs on every tick (O(1)); a snapshot (all fields below) is emitted once per bar, 1 second before bar close (`tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`, default `snapshot_interval_s=30`). Available in `features_volume_profile` stream but not included in the trained model yet.
+Computed by `feat_files/volume_profile.py` from tick data. `_update()` runs on every tick (O(1)); the current gate emits on every qualifying tick in the final second (`tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`). This can produce multiple records per interval. Available in `features_volume_profile` but not included in the MA model yet.
 
 | Feature             | Description                                                              |
 | ------------------- | ------------------------------------------------------------------------ |

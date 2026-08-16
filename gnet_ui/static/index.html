@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GNET Model Registry</title>
+  <style>
+    :root { color-scheme: dark; --ink:#f4f7fb; --muted:#91a0b7; --panel:#121a27; --line:#26354a; --cyan:#27d3c2; --blue:#4d8cff; --red:#ff6376; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:Inter,Segoe UI,sans-serif; color:var(--ink); background:radial-gradient(circle at 12% 8%,#18324b 0,transparent 30%),#090e16; }
+    main { width:min(1120px,calc(100% - 32px)); margin:auto; padding:48px 0 72px; }
+    header { display:flex; justify-content:space-between; gap:24px; align-items:end; margin-bottom:32px; }
+    .eyebrow { color:var(--cyan); letter-spacing:.16em; text-transform:uppercase; font-size:12px; font-weight:700; }
+    h1 { margin:8px 0 6px; font-size:clamp(32px,5vw,58px); line-height:.95; letter-spacing:-.045em; }
+    .sub { color:var(--muted); max-width:650px; margin:0; }
+    .status { border:1px solid var(--line); background:#0d1521cc; border-radius:999px; padding:9px 14px; color:var(--muted); white-space:nowrap; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--cyan); margin-right:8px; box-shadow:0 0 14px var(--cyan); }
+    #errors { display:none; border:1px solid #723547; color:#ffc2cb; background:#2a111a; padding:14px; border-radius:12px; margin-bottom:18px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; }
+    article { border:1px solid var(--line); background:linear-gradient(160deg,#162131,#0f1723); border-radius:18px; padding:22px; box-shadow:0 18px 50px #0005; }
+    .cardhead { display:flex; justify-content:space-between; gap:16px; align-items:start; }
+    h2 { margin:0 0 5px; font-size:22px; }
+    code { color:#b9c7da; font-size:12px; }
+    .badge { padding:6px 9px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; background:#17382f; color:#7cf1ce; }
+    .badge.off { background:#32202a; color:#ff9cad; }
+    dl { display:grid; grid-template-columns:110px 1fr; gap:10px; margin:22px 0; font-size:13px; }
+    dt { color:var(--muted); } dd { margin:0; overflow-wrap:anywhere; }
+    label { display:block; color:var(--muted); font-size:12px; margin:14px 0 6px; }
+    input,select { width:100%; border:1px solid var(--line); color:var(--ink); background:#0a111b; border-radius:10px; padding:10px 12px; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    button { width:100%; margin-top:18px; border:0; border-radius:11px; padding:11px 15px; color:#06120f; background:linear-gradient(90deg,var(--cyan),#69a7ff); font-weight:800; cursor:pointer; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .note { color:var(--muted); font-size:12px; margin-top:14px; }
+    @media (max-width:650px) { header { align-items:start; flex-direction:column; } main { padding-top:30px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">Local operations</div><h1>Model Registry</h1><p class="sub">Models are discovered from directories. Changes are validated here and take effect the next time the strategy router starts.</p></div>
+    <div class="status"><span class="dot"></span><span id="count">Loading registry</span></div>
+  </header>
+  <div id="errors"></div>
+  <section class="grid" id="grid"></section>
+</main>
+<script>
+const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load() {
+  const response = await fetch('/api/strategies');
+  const data = await response.json();
+  document.querySelector('#count').textContent = `${data.strategies.length} discovered`;
+  const errors = document.querySelector('#errors');
+  if (data.errors.length) { errors.style.display='block'; errors.textContent=data.errors.join('\n'); }
+  document.querySelector('#grid').innerHTML = data.strategies.map(s => `
+    <article data-id="${esc(s.strategy_id)}">
+      <div class="cardhead"><div><h2>${esc(s.display_name)}</h2><code>${esc(s.strategy_id)}</code></div><span class="badge ${s.enabled?'':'off'}">${s.enabled?'enabled':'disabled'}</span></div>
+      <dl><dt>Model</dt><dd>${esc(s.model_type)}</dd><dt>Features</dt><dd>${esc(s.feature_stream)}</dd><dt>Artifacts</dt><dd>${esc(s.artifact_dir)}</dd></dl>
+      <div class="row"><div><label>Enabled</label><select class="enabled"><option value="true" ${s.enabled?'selected':''}>Enabled</option><option value="false" ${s.enabled?'':'selected'}>Disabled</option></select></div><div><label>Device</label><select class="device"><option ${s.device==='cpu'?'selected':''}>cpu</option><option ${s.device==='cuda'?'selected':''}>cuda</option></select></div></div>
+      <label>Approval threshold</label><input class="threshold" type="number" min="0" max="1" step="0.01" value="${s.threshold}">
+      <button onclick="save(this)">Save configuration</button><div class="note">Router restart required after a change.</div>
+    </article>`).join('');
+}
+async function save(button) {
+  const card=button.closest('article'); button.disabled=true; button.textContent='Validating…';
+  const body={enabled:card.querySelector('.enabled').value==='true',device:card.querySelector('.device').value,threshold:Number(card.querySelector('.threshold').value)};
+  const response=await fetch(`/api/strategies/${encodeURIComponent(card.dataset.id)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json();
+  if(!response.ok){ alert(data.error); button.disabled=false; button.textContent='Save configuration'; return; }
+  await load();
+}
+load().catch(error => { const box=document.querySelector('#errors'); box.style.display='block'; box.textContent=error; });
+</script>
+</body>
+</html>

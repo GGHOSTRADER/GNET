@@ -56,16 +56,19 @@ All active streams live on Redis 1 (`127.0.0.1:6381`).
 
 | Stream | Producer | Consumer(s) | maxlen | Frequency |
 |---|---|---|---|---|
-| `validated_bar` | `tcp_to_redis_connection.py` | `feat_eng_1.py`, `transformer_features.py` | 1,000 | 1 per bar close |
+| `validated_bar` | `tcp_to_redis_connection.py` | `transformer_features.py` | 1,000 | 1 per bar close |
 | `tick_data_raw` | `tcp_to_redis_ticks.py` | `tick_validator.py` | 50,000 | every tick |
 | `tick_data_validated` | `tick_validator.py` | `volume_profile.py` | 50,000 | every tick |
-| `features_transformer` | `transformer_features.py` | `consolidator.py` | 1,000 | 1 per bar close |
-| `features_volume_profile` | `volume_profile.py` | `consolidator.py` | 50,000 | 1 per bar (1s before close) |
+| `features_transformer` | `transformer_features.py` | `strategy_router.py`; optional `consolidator.py` debugger | 1,000 | 1 per bar close |
+| `features_volume_profile` | `volume_profile.py` | optional `consolidator.py` debugger only | 50,000 | every qualifying tick in the final second |
+| `trade_candidates` | `candidate_tcp_server.py` | `strategy_router.py` | 5,000 | only when a primary signal fires |
+| `trade_decisions` | `strategy_router.py` | `signal_tcp_server.py` | 5,000 | one explicit result per candidate |
 
 **maxlen policy:**
 - Tick streams (`tick_data_raw`, `tick_data_validated`) → **50,000** entries: high-frequency, need a large buffer.
 - Bar streams (`validated_bar`, `features_transformer`) → **1,000** entries: 1 per bar close, low-frequency, small buffer is enough.
-- `features_volume_profile` is now bar-frequency (snapshot gated by `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`) but keeps the larger **50,000** maxlen inherited from its tick-frequency origin — oversized but harmless.
+- Candidate and decision streams → **5,000** entries: event-driven and shared by all strategies.
+- `features_volume_profile` is gate-limited but can contain multiple snapshots per interval because every tick timestamped in the final second qualifies. It keeps a **50,000** maxlen.
 - All `xadd` calls use `approximate=True` so Redis trims lazily without blocking the write path.
 
 ---

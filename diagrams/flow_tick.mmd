@@ -1,5 +1,8 @@
 ---
 title: GNET Tick Validation and Volume-Profile Flow
+config:
+  themeCSS: |
+    .titleText { font-size: 30px !important; font-weight: 700 !important; }
 ---
 flowchart TD
 
@@ -71,3 +74,8 @@ flowchart TD
         VP_GATE
         VP_SNAP
     end
+
+    classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
+    class DLL,TCP_SOCK,BUF,XADD,REDIS_RAW,XREAD,EXTRACT,CAST,VAL_TICK,VAL_SEQ,ENCODE,REDIS_CLEAN,DROP,VP_READ,VP_UPDATE,VP_GATE,VP_SNAP,REDIS_VP tickPath
+    class TS sharedPath

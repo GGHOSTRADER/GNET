@@ -8,7 +8,7 @@
 
 ## What It Does
 
-Reads tick data from Redis1 in real time and maintains a stateful Volume Profile for the current trading session. The profile updates on every tick; a snapshot (POC, Value Area, and all derived features) is emitted once per bar, 1 second before bar close.
+Reads tick data from Redis1 in real time and maintains a stateful Volume Profile for the current trading session. The profile updates on every tick. The current gate emits a snapshot for every tick timestamped in the final second, so an interval may contain multiple snapshots.
 
 Data arriving from Redis is already validated at ingestion (`tick_validator.py` + `tick_codec.py`). This file just reads and casts.
 
@@ -51,7 +51,7 @@ Grid extension only happens if price breaks outside the pre-allocated range. Ext
 |---|---|---|---|
 | `tick_size` | float | `0.25` | Price increment per level (e.g. 0.25 for ES futures) |
 | `range_ticks` | int | `400` | Ticks to pre-allocate at session start. 400 ticks @ 0.25 = ±50 points around open |
-| `snapshot_interval_s` | int | `30` | Bar length in seconds. Snapshot fires when `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`, i.e. once per bar, 1 second before bar close. Set to match the live bar size. |
+| `snapshot_interval_s` | int | `30` | Interval length. Every tick satisfying `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1` fires a snapshot. Set to match the live bar size. |
 
 **From CLI:**
 ```bash
@@ -77,7 +77,7 @@ stream_volume_profile(tick_size=0.25, range_ticks=600, snapshot_interval_s=30)
 
 ## Outputs — `VolumeProfileResult`
 
-Emitted once per bar (1 second before bar close).
+Emitted on every qualifying tick in the final second; multiple records per interval are possible.
 
 | Field | Type | Description |
 |---|---|---|
@@ -213,7 +213,7 @@ Derives `price_levels` from `min_price + np.arange * tick_size`. Calls `_find_po
 ### Application
 
 **`stream_volume_profile(tick_size, range_ticks, snapshot_interval_s, block_ms, count, start_id)`**
-Main generator. Manages session lifecycle, calls `_init_session` on new day. Calls `_update` on every tick (always). Calls `_snapshot` — and yields its result — only when `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1` (once per bar).
+Main generator. Manages session lifecycle, calls `_init_session` on new day, and calls `_update` on every tick. It calls `_snapshot` whenever `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`; every tick in that second qualifies.
 
 **`run_publish_loop(tick_size, range_ticks, snapshot_interval_s)`**
 Main loop. Pushes each `VolumeProfileResult` to `features_volume_profile` via `xadd` and prints one line per bar including grid size, extension count, and all derived features. Accepts CLI flags via `argparse` when run as `__main__`.

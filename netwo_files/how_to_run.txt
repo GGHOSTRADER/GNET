@@ -1,5 +1,12 @@
-HOW TO RUN THE PIPELINE
-========================
+LEGACY BAR-INGESTION GUIDE (NOT THE FULL PIPELINE)
+==================================================
+
+For the current eight-service pipeline, candidate router, ports 9011/9012,
+and TradeStation setup, use:
+
+    documentation/how_to_run_pipeline.md
+
+The commands below cover only the original bar-ingestion path.
 
 Run these steps IN ORDER, each in its own PowerShell terminal.
 
@@ -54,11 +61,7 @@ The Python server parses it, validates it, and writes it to Redis stream "valida
 
 STEP 4 (Optional) - Run the Feature Pipeline
 ----------------------------------------------
-    python -m transformer_features
-
-or
-
-    python -m feat_files.feat_eng_1
+    python -m feat_files.transformer_features
 
 These read from Redis stream "validated_bar" and emit feature points.
 
