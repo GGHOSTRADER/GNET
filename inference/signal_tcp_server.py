@@ -87,8 +87,19 @@ def _serve(conn: socket.socket, addr: tuple, redis_client) -> None:
                 reading_pending = False
             continue
 
-        _, entries = result[0]
-        entry_id, fields = entries[0]
+        # Redis can represent "stream exists, but this consumer has no pending
+        # entries" as [[stream_name, []]]. Treat that exactly like an empty
+        # read and switch from pending recovery to new-message consumption.
+        entry = next(
+            (entries[0] for _, entries in result if entries),
+            None,
+        )
+        if entry is None:
+            if reading_pending:
+                reading_pending = False
+            continue
+
+        entry_id, fields = entry
         if reading_pending:
             pending_id = entry_id
         try:

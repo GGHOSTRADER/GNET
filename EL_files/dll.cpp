@@ -31,6 +31,8 @@
 #include <cstdio>
 #include <string>
 
+#include "fail_fast_socket.hpp"
+
 #pragma comment(lib, "Ws2_32.lib")
 
 // 🔴 IMPORTANT  🔴
@@ -40,84 +42,8 @@
 #pragma comment(linker, "/EXPORT:SendBar=_SendBar@64")
 
 
-static SOCKET g_sock = INVALID_SOCKET;
-static bool   g_wsa_init = false;
-
-static void cleanup_socket() {
-    if (g_sock != INVALID_SOCKET) {
-        closesocket(g_sock);
-        g_sock = INVALID_SOCKET;
-    }
-    if (g_wsa_init) {
-        WSACleanup();
-        g_wsa_init = false;
-    }
-}
-
-static bool ensure_connected(const char* host, unsigned short port) {
-    if (g_sock != INVALID_SOCKET) return true;
-
-    if (!g_wsa_init) {
-        WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-            return false;
-        }
-        g_wsa_init = true;
-    }
-
-    addrinfo hints{};
-    hints.ai_family   = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    char port_str[16];
-    std::snprintf(port_str, sizeof(port_str), "%u", port);
-
-    addrinfo* result = nullptr;
-    if (getaddrinfo(host, port_str, &hints, &result) != 0) {
-        return false;
-    }
-
-    SOCKET s = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (s == INVALID_SOCKET) {
-        freeaddrinfo(result);
-        return false;
-    }
-
-    DWORD timeout_ms = 200;
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
-
-    int rc = connect(s, result->ai_addr, (int)result->ai_addrlen);
-    freeaddrinfo(result);
-
-    if (rc == SOCKET_ERROR) {
-        closesocket(s);
-        return false;
-    }
-
-    g_sock = s;
-    return true;
-}
-
-static bool send_all(const char* data, int len) {
-    if (g_sock == INVALID_SOCKET) return false;
-
-    int sent_total = 0;
-    while (sent_total < len) {
-        int sent = send(g_sock, data + sent_total, len - sent_total, 0);
-        if (sent == SOCKET_ERROR || sent == 0) {
-            cleanup_socket();
-            return false;
-        }
-        sent_total += sent;
-    }
-    return true;
-}
-
-static bool send_line(const std::string& line) {
-    return send_all(line.c_str(), (int)line.size());
-}
+static FailFastSocket g_client;
+static SRWLOCK g_lock = SRWLOCK_INIT;
 
 // Must have the right parameters here to send through Sendbar function
 extern "C" __declspec(dllexport) int __stdcall SendBar(
@@ -133,12 +59,8 @@ extern "C" __declspec(dllexport) int __stdcall SendBar(
     double vwap,
     int bar
 ) {
-    if (!ensure_connected("127.0.0.1", 9009)) {
-        return 0;
-    }
-
     char buf[512];
-    std::snprintf(
+    const int length = std::snprintf(
         buf, sizeof(buf),
         //%.10g is used for float and double
         // %d is used for intergers
@@ -153,16 +75,17 @@ extern "C" __declspec(dllexport) int __stdcall SendBar(
         vwap,
         bar
     );
-
-    if (!send_line(std::string(buf))) {
-        return 0;
-    }
-    return 1;
+    if (length <= 0 || length >= static_cast<int>(sizeof(buf))) return 0;
+    if (!TryAcquireSRWLockExclusive(&g_lock)) return 0;
+    const bool connected = g_client.ensure_connected("127.0.0.1", 9009);
+    const bool sent = connected && g_client.send_all(buf, length);
+    ReleaseSRWLockExclusive(&g_lock);
+    return sent ? 1 : 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     if (ul_reason_for_call == DLL_PROCESS_DETACH) {
-        cleanup_socket();
+        g_client.shutdown();
     }
     return TRUE;
 }

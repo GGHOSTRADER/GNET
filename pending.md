@@ -37,6 +37,27 @@
 22. Added durable Redis consumer groups: the router acknowledges candidates after decision publication, and the signal server acknowledges decisions after TCP delivery.
 23. Audited and removed the unused `feat_eng_1.py` prototype and its isolated test. `consolidator.py` remains an optional print-only debugger and does not currently feed inference.
 24. Installed the `GNET Pipeline Watchdog` Windows Scheduled Task successfully in its initial OFF state and documented the daily ON/OFF/status commands.
+25. Changed the live VP session boundary from a calendar-date reset to the ES 18:00 session open; the profile now remains continuous across midnight and preserves each snapshot's calendar date for exact feature matching.
+26. Added `training_mlp.prepare_historical_vp`, which validates the four TradeStation tick exports, converts them to Zstandard-compressed Parquet by 18:00 session, resolves identical overlapping sessions, rejects conflicting overlaps by default, and writes JSON/CSV manifests.
+27. Moved the four large TradeStation exports out of the repository root into `historical_vp/raw/`; generated Parquet and manifests now default to `historical_vp/prepared/`.
+28. Made historical preparation resumable: conflicting overlaps preserve compressed staging data and can be finalized with `--resume` without scanning or converting the 5 GB raw exports again.
+29. Expanded `historical_vp/README.md` into a complete setup and operations guide and added a dedicated Mermaid diagram for validation, session partitioning, overlap handling, staging, and finalization.
+30. Changed historical VP preparation to discover every numbered `volumeprof<number>.txt` export automatically and process the files in numeric order.
+31. Optimized historical VP preparation with strict fixed-format date/time parsing, configurable process-parallel source staging (two workers by default), and throughput metrics in the completion summary.
+32. Extracted canonical, transport-independent volume-profile state and mathematics into `feat_files/canonical_volume_profile.py`; the live Redis service now imports that engine through compatibility aliases, ready for historical Parquet replay to use the same code.
+33. Expanded the canonical VP contract to 32 candidate features using TradeStation-classified Up/Down volume, including cumulative and price-level delta, recent divergence, Value Area dynamics, profile shape, acceptance, POC velocity, and grouped HVN/LVN measurements; scalar fields now publish live through Redis.
+34. Added PID-scoped `stop.ps1` and `restart.ps1` commands; `launch.ps1` now records every managed service terminal, shutdown disables the watchdog and verifies GNET ports, and Redis data is preserved by default.
+35. Expanded the workflow guide with normal and legacy shutdown behavior, watchdog elevation troubleshooting, and an explicit matrix of what happens to Docker Desktop, Redis, TradeStation, and stored stream data.
+36. Added guarded `nuke.ps1` for an intentional hard reset: it requires explicit data-loss confirmation, verifies the exact `redis1` target, removes all Redis state, optionally recreates an empty container, and then gracefully shuts down Docker Desktop and its engine without deleting unrelated containers.
+37. Added `kill_tradestation.ps1` with list-only inspection, path/company-scoped force termination, and post-kill verification for recovering from a frozen TradeStation instance.
+38. Updated the setup workflow with the exact saved TradeStation document names: `g_cpp_dll_bar`, `g_cpp_dll_tick`, and `G_MA_CROSS_NN`, while preserving their source-file and DLL mappings.
+39. Added same-named EasyLanguage backups under `EL_files/` for the installed TradeStation strategy and bar/tick indicators, plus a backup mapping README and direct setup-guide links.
+40. Added prominent startup-order warnings to the main README and live workflow guide: all four Python TCP endpoints must be listening before enabling the TradeStation components, or DLL reconnection attempts can leave TradeStation stuck in a waiting loop.
+41. Hardened all four TradeStation DLL sources with a shared fail-fast socket layer: 2 ms bounded non-blocking connection attempts, two-second failure backoff, non-blocking established sockets, and try-locks that return immediately rather than waiting on a chart thread. Added a coordinated x86 staging build script.
+42. Hardened the three installed EasyLanguage backups with live-bar-only DLL traffic and transition-only connection logging; the MA strategy also times out lost pending candidates while keeping its protective exits independent of ML connectivity.
+43. Added `check_gnet_ports.ps1`, a readiness check and continuously refreshing `-Watch` dashboard for ports 9009–9012 that defaults to a ten-second interval, shows the mapped service and owning process, warns against enabling TradeStation when any endpoint is missing, and retains a scriptable one-shot success/failure mode.
+44. Added the live port monitor to the scoped shutdown allowlist, so `stop.ps1`, `restart.ps1`, and `nuke.ps1` also close PowerShell processes running `check_gnet_ports.ps1 -Watch` without targeting unrelated terminals.
+45. Added non-destructive `stop.ps1 -StopDockerDesktop`: it stops GNET and `redis1`, preserves Redis data, and gracefully closes Docker Desktop and its engine to release memory.
 
 ## 2. TODO / Next Steps
 
@@ -55,3 +76,4 @@
 13. Benchmark CPU versus GPU inference for the actual small MLP and choose the deployment device from measurements.
 14. After the new route is proven live, remove or archive the legacy `inference_engine.py`, `trade_signal` configuration, and remaining historical setup paths so there is only one supported live inference path. Keep `consolidator.py` only if its manual debugging output remains useful or it becomes the basis for the production VP join.
 15. Align the live scikit-learn version with the 1.8.0 version used to serialize `scaler_best.pkl`, or regenerate and verify the scaler under the deployment environment. The current 1.5.1 runtime emits an incompatibility warning.
+16. After installing the staged hardened DLLs and recompiling the updated EasyLanguage documents, run a deliberate Python-outage test and confirm TradeStation remains responsive while ports 9009–9012 are unavailable and later reconnects cleanly.

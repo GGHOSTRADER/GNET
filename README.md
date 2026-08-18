@@ -39,8 +39,61 @@ TradeStation strategies → StrategyBridge.dll (9012) → candidates ───�
 ```powershell
 .\launch.ps1
 ```
+
 Starts Docker Desktop, Redis (`6381`), TradeStation, all nine Python services,
 and opens the local registry page.
+
+> [!WARNING]
+> Do not enable the GNET EasyLanguage indicators or strategy until
+> `launch.ps1` reports `=== All services launched ===` and ports `9009`, `9010`,
+> `9011`, and `9012` are all listening. Otherwise the DLL connection/retry loop
+> can make TradeStation appear frozen.
+
+Check all four TradeStation-facing ports at any time:
+
+```powershell
+.\check_gnet_ports.ps1 -Watch
+```
+
+The dashboard refreshes every ten seconds. Press `Ctrl+C` to stop it. Run
+`.\check_gnet_ports.ps1` without `-Watch` for a single scriptable check.
+
+Stop or restart the PID-scoped GNET service trees without clearing Redis.
+Plain `stop.ps1` leaves Docker Desktop, `redis1`, Redis data, and TradeStation
+running:
+
+```powershell
+.\stop.ps1
+.\restart.ps1
+```
+
+Stop GNET and Redis and close Docker Desktop to release its memory, without
+deleting Redis data:
+
+```powershell
+.\stop.ps1 -StopDockerDesktop
+```
+
+Restart the Redis container too, without deleting its data:
+
+```powershell
+.\restart.ps1 -RestartRedis
+```
+
+Emergency force-close for a frozen TradeStation instance:
+
+```powershell
+cd C:\Users\g_med\python_new\GNET
+.\kill_tradestation.ps1 -ListOnly
+.\kill_tradestation.ps1
+```
+
+Destructive hard reset—remove `redis1` and all data, recreate it empty, then
+shut down Docker Desktop and its engine:
+
+```powershell
+.\nuke.ps1 -ConfirmDataLoss -RecreateEmptyRedis
+```
 
 ### Step 2 — Bar Ingestion
 ```powershell

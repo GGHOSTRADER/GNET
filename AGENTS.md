@@ -94,7 +94,8 @@ TradeStation strategy → StrategyBridge.dll (9012) → candidates ─┤
 | `netwo_files/tcp_to_redis_ticks.py` | Tick TCP drain (zero processing, max throughput) |
 | `netwo_files/tick_validator.py` | Cast + validate ticks, push to `tick_data_validated` |
 | `feat_files/transformer_features.py` | 13 features from 60-bar rolling window; `FeaturePoint` dataclass |
-| `feat_files/volume_profile.py` | Stateful incremental POC + Value Area; may emit multiple final-second snapshots |
+| `feat_files/canonical_volume_profile.py` | Transport-independent total/Up/Down VP state, POC, Value Area, and 32 candidate features |
+| `feat_files/volume_profile.py` | Live Redis adapter and snapshot cadence; may emit multiple final-second snapshots |
 | `feat_files/consolidator.py` | Debugging tool: merges transformer + volume profile streams |
 | `inference/candidate_tcp_server.py` | Validates candidates from shared TCP port 9012 and writes `trade_candidates` |
 | `inference/strategy_router.py` | Exact feature join, strategy-model selection, inference, `trade_decisions` output |
@@ -136,7 +137,7 @@ Redis is at `127.0.0.1:6381` (Docker container named `redis1`).
 - All 13 features in `transformer_features.py` are **pure functions**: no I/O, no globals, no mutation.
 - The system waits for a 60-bar warm-up window before emitting any `FeaturePoint`.
 - Feature functions use `_require_feature()` (always active, never disabled) not `assert`.
-- Volume profile (`volume_profile.py`) uses stateful O(1) incremental updates per tick. Its current final-second gate can call `_snapshot()` more than once per interval.
+- Canonical volume-profile math (`canonical_volume_profile.py`) uses stateful O(1) incremental updates per tick; the live adapter's current final-second gate can request more than one snapshot per interval.
 
 ### No External ML Libraries
 The feature engineering stack uses only `math`, `collections.deque`, and `numpy` (volume profile only). No pandas, no talib, no sklearn in the hot path. The trained MLP uses PyTorch.

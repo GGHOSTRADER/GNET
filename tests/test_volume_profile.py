@@ -17,7 +17,7 @@ The volume profile is a stateful accumulator. These tests verify:
   - Value area encloses at least 70% of session volume
   - Each tick increments the correct profile index (O(1) update)
   - Grid extends correctly when price breaks above or below bounds
-  - Session resets cleanly on date change
+  - Session resets at 18:00 and remains continuous across midnight
 
 Test Index
 ----------
@@ -28,7 +28,7 @@ Test Index
   [05] test_profile_total_volume_is_correct        -- total_volume matches sum of tick volumes
   [06] test_profile_extends_grid_above_ceiling     -- extensions counter increases on upside break
   [07] test_profile_extends_grid_below_floor       -- extensions counter increases on downside break
-  [08] test_profile_session_resets_on_date_change  -- n_bars resets to 1 on new date
+  [08] test_profile_session_resets_at_1800_not_midnight -- ES session boundary
   [09] test_snapshot_price_levels_are_tick_spaced  -- price_levels increment by tick_size
   [10] test_snapshot_arrays_are_parallel           -- price_levels and volume_at_level same length
   [11] test_poc_concentration_single_level         -- single-level profile has concentration == 1.0
@@ -51,6 +51,7 @@ from feat_files.volume_profile import (
     _init_session,
     _update,
     _snapshot,
+    _session_key,
     stream_volume_profile,
 )
 
@@ -73,9 +74,10 @@ class TickStub:
 
 
 def make_stub(price: float = 5000.0, bar_num: int = 1,
-              volume: int = 100, date: int = 1260125) -> TickStub:
+              volume: int = 100, date: int = 1260125,
+              time_s: int = 36000) -> TickStub:
     return TickStub(
-        symbol="@ES", date=date, time_s=36000,
+        symbol="@ES", date=date, time_s=time_s,
         high=price, low=price, up=volume, down=0, bar_num=bar_num,
     )
 
@@ -169,18 +171,29 @@ def test_profile_extends_grid_below_floor():
 
 
 # [08]
-def test_profile_session_resets_on_date_change():
-    """Positive — n_bars resets to 1 and date updates when session re-initialises."""
-    t1 = make_stub(price=5000.0, bar_num=1, date=1260125)
-    state = _init_session(t1, tick_size=0.25, range_ticks=40)
-    _update(state, t1)
-    assert state.n_bars == 1
+def test_profile_session_resets_at_1800_not_midnight(monkeypatch):
+    """Positive — reset at 18:00; the same session continues through midnight."""
+    ticks = [
+        make_stub(bar_num=1, date=1260125, time_s=17 * 3600 + 59 * 60 + 59),
+        make_stub(bar_num=2, date=1260125, time_s=18 * 3600),
+        make_stub(bar_num=3, date=1260126, time_s=0),
+    ]
+    monkeypatch.setattr(
+        "feat_files.volume_profile.stream_ticks_from_redis",
+        lambda **kwargs: iter(ticks),
+    )
 
-    t2 = make_stub(price=5000.0, bar_num=1, date=1260126)
-    state = _init_session(t2, tick_size=0.25, range_ticks=40)
-    _update(state, t2)
-    assert state.n_bars == 1
-    assert state.date   == 1260126
+    results = list(
+        stream_volume_profile(
+            tick_size=0.25,
+            range_ticks=40,
+            snapshot_interval_s=1,
+        )
+    )
+
+    assert [vp.n_bars for vp in results] == [1, 1, 2]
+    assert [vp.date for vp in results] == [1260125, 1260125, 1260126]
+    assert _session_key(1261231, 18 * 3600) == 1270101
 
 
 # [09]

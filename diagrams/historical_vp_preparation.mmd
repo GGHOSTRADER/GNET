@@ -1,0 +1,62 @@
+---
+title: Historical Volume-Profile Data Preparation
+config:
+  themeCSS: |
+    .titleText { font-size: 32px !important; font-weight: 700 !important; }
+---
+flowchart TD
+
+    TS["TradeStation 1-tick chart<br/>Trade Volume export"]
+    RAW["All discovered raw text files<br/>volumeprof&lt;number&gt;.txt"]
+    READ["Stream rows in batches<br/>without loading all files into memory"]
+    VALIDATE["Validate schema, ordering, OHLC,<br/>price, volume, and timestamps"]
+    SESSION["Assign each tick to its<br/>18:00 ES trading session"]
+    STAGE["Write source-specific staged Parquet<br/>and calculate normalized session hashes"]
+    OVERLAP{"Does a session occur<br/>in multiple exports?"}
+    SINGLE["Select its only source"]
+    IDENTICAL{"Same row count<br/>and content hash?"}
+    DEDUPE["Keep one deterministic owner<br/>and discard the identical copy"]
+    CONFLICT["Preserve staging and write<br/>overlap_conflicts.json + INCOMPLETE.txt"]
+    REVIEW["User reviews conflicting<br/>timestamps or values"]
+    RESUME["Resume with explicit conflict flag<br/>choose source with most rows"]
+    FINAL["Final compressed dataset<br/>one ticks.parquet per session"]
+    MANIFEST["manifest.json<br/>manifest_partitions.csv"]
+    FUTURE["Future step: replay ticks through<br/>canonical VP math for backtesting"]
+
+    TS --> RAW
+    RAW --> READ
+    READ --> VALIDATE
+    VALIDATE --> SESSION
+    SESSION --> STAGE
+    STAGE --> OVERLAP
+    OVERLAP -->|"no"| SINGLE
+    OVERLAP -->|"yes"| IDENTICAL
+    IDENTICAL -->|"yes"| DEDUPE
+    IDENTICAL -->|"no"| CONFLICT
+    CONFLICT --> REVIEW
+    REVIEW --> RESUME
+    SINGLE --> FINAL
+    DEDUPE --> FINAL
+    RESUME --> FINAL
+    FINAL --> MANIFEST
+    FINAL -.-> FUTURE
+
+    subgraph LEGEND["Legend"]
+        L1["Raw input"]
+        L2["Validation / transformation"]
+        L3["Overlap decision"]
+        L4["Generated output"]
+        L5["Planned future work"]
+    end
+
+    classDef input fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px;
+    classDef process fill:#f3f4f6,stroke:#4b5563,color:#111827,stroke-width:2px;
+    classDef decision fill:#ffedd5,stroke:#ea580c,color:#431407,stroke-width:2px;
+    classDef output fill:#dcfce7,stroke:#16a34a,color:#052e16,stroke-width:2px;
+    classDef future fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:2px,stroke-dasharray: 5 5;
+
+    class TS,RAW,L1 input;
+    class READ,VALIDATE,SESSION,STAGE,REVIEW,RESUME,L2 process;
+    class OVERLAP,IDENTICAL,L3 decision;
+    class SINGLE,DEDUPE,CONFLICT,FINAL,MANIFEST,L4 output;
+    class FUTURE,L5 future;

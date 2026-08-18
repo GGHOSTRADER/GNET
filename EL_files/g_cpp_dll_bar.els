@@ -1,0 +1,59 @@
+{ Sending Data from TS to Python server through BarBridge.dll }
+
+using elsystem;
+
+{ DllPath is retained to match the saved TradeStation document. The External
+  declaration below is the path actually used for the DLL call. }
+Inputs:
+    DllPath("C:\Users\g_med\python_new\GNET\EL_files\dll.cpp");
+
+Vars:
+    yyyymmdd(0),
+    bar_num(0),
+    ok(0),
+    last_connection_state(-1),
+    TimeSpan hhmmss(null);
+
+External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBar",
+    Lpstr,      { symbol }
+    int,        { yyyymmdd }
+    int,        { hhmmss }
+    double,     { open }
+    double,     { high }
+    double,     { low }
+    double,     { close }
+    int,        { up }
+    int,        { down }
+    double,     { vwap }
+    int;        { bar_num }
+
+{ Send only the live chart's completed bar. Historical reloads must never
+  replay through the DLL. }
+If LastBarOnChart and BarStatus(1) = 2 Then Begin
+    yyyymmdd = Date;
+    hhmmss = BarDateTime.TimeOfDay;
+    bar_num = CurrentBar;
+    ok = SendBar(
+        Symbol,
+        yyyymmdd,
+        IntPortion(hhmmss.TotalSeconds),
+        Open,
+        High,
+        Low,
+        Close,
+        UpTicks,
+        DownTicks,
+        VWAP,
+        bar_num
+    );
+
+    If ok <> last_connection_state Then Begin
+        If ok = 1 Then
+            Print(Time, " GNET bar bridge connected")
+        Else
+            Print(Time, " GNET bar bridge unavailable; retry is throttled");
+        last_connection_state = ok;
+    End;
+End;
+
+Plot1(bar_num, "bar num", Red);

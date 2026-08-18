@@ -35,7 +35,11 @@ Output: `signal=1` (buy) when `sigmoid(logit) >= THRESHOLD` (default 0.5).
 
 ## Volume Profile Features (not used by current MLP)
 
-Computed by `feat_files/volume_profile.py` from tick data. `_update()` runs on every tick (O(1)); the current gate emits on every qualifying tick in the final second (`tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`). This can produce multiple records per interval. Available in `features_volume_profile` but not included in the MA model yet.
+Computed by `feat_files/canonical_volume_profile.py` from TradeStation-classified
+`Up` and `Down` tick volume. The live adapter can emit multiple records per
+interval because every qualifying final-second tick currently requests a
+snapshot. These fields are available in `features_volume_profile` but are not
+included in the MA model.
 
 | Feature             | Description                                                              |
 | ------------------- | ------------------------------------------------------------------------ |
@@ -52,3 +56,40 @@ Computed by `feat_files/volume_profile.py` from tick data. `_update()` runs on e
 | profile_entropy     | -Σp·log(p) over the volume distribution — low=concentrated, high=diffuse |
 | profile_kurtosis    | Excess kurtosis of the volume distribution — peakedness of the profile  |
 | poc_migration       | (poc_price_now - poc_price_prev_bar) / tick_size — POC drift since last bar |
+
+### Extended canonical VP contract
+
+`Up` and `Down` are TradeStation price-direction classifications, not verified
+bid/ask aggressor flags. Delta fields are therefore named **classified** delta.
+
+| Feature | Definition |
+|---|---|
+| classified_cumulative_delta | Session cumulative `sum(Up - Down)` |
+| classified_delta_ratio | Cumulative classified delta / total session volume |
+| classified_delta_at_poc_ratio | Classified delta at POC / POC volume |
+| classified_value_area_delta_ratio | Classified delta inside VAL–VAH / volume inside VAL–VAH |
+| classified_delta_above_below_poc | `(delta above POC - delta below POC) / total volume` |
+| max_abs_delta_price_distance | Signed current-price distance from the largest absolute-delta level, in ticks |
+| classified_delta_concentration | Largest absolute level delta / total absolute level delta |
+| recent_classified_delta_ratio | Classified delta since prior snapshot / volume since prior snapshot |
+| price_classified_delta_divergence | `-price_change_ticks * recent_classified_delta_ratio`; positive means opposing directions |
+| va_expansion_rate | Change in Value Area width since the previous snapshot, in ticks |
+| poc_velocity_5 | POC displacement over five snapshots / five, in ticks per snapshot |
+| volume_above_vah_ratio | Session volume above VAH / total volume |
+| volume_below_val_ratio | Session volume below VAL / total volume |
+| profile_skewness | Volume-weighted profile skewness |
+| current_price_acceptance_ratio | Volume within current price ±4 ticks / total volume |
+| distance_to_val_ticks | `(current price - VAL) / tick_size` |
+| distance_to_vah_ticks | `(VAH - current price) / tick_size` |
+| nearest_hvn_distance_ticks | Signed distance from current price to nearest grouped HVN |
+| nearest_lvn_distance_ticks | Signed distance from current price to nearest grouped LVN |
+| nearest_hvn_strength | Nearest HVN representative volume / median occupied-level volume |
+| nearest_lvn_strength | Nearest LVN representative volume / median occupied-level volume |
+| hvn_count | Count of contiguous nodes at or above 1.5× the occupied-level median |
+| lvn_count | Count of contiguous nodes at or below 0.5× the occupied-level median |
+| current_price_in_hvn | `1.0` when the current price level belongs to an HVN, otherwise `0.0` |
+
+The canonical tuple `VOLUME_PROFILE_FEATURE_NAMES` is the authoritative ordered
+list of all 32 candidate VP features. Snapshots also retain total, Up, Down, and
+classified-delta arrays by price for offline analysis; Redis publishes only
+scalar fields.

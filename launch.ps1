@@ -7,11 +7,29 @@ $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DOCKER_DESKTOP = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 $TRADESTATION_SHORTCUT = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TradeStation\TradeStation.lnk"
 $ROUTER_READY_KEY = "gnet:strategy_router:ready"
+$RUNTIME_DIR = Join-Path $ROOT ".runtime"
+$PROCESS_REGISTRY = Join-Path $RUNTIME_DIR "gnet_processes.json"
+$script:ManagedProcesses = @()
+
+function Save-ProcessRegistry {
+    $script:ManagedProcesses | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $PROCESS_REGISTRY -Encoding UTF8
+}
+
+function Register-ManagedProcess {
+    param([System.Diagnostics.Process]$Process, [string]$Title)
+    $script:ManagedProcesses += [pscustomobject]@{
+        pid = $Process.Id
+        title = $Title
+        started_at = $Process.StartTime.ToUniversalTime().ToString("o")
+    }
+    Save-ProcessRegistry
+}
 
 function Open-Terminal {
     param([string]$Title, [string]$Command)
     $cmd = "cd '$ROOT'; `$host.UI.RawUI.WindowTitle = '$Title'; $Command"
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", $cmd | Out-Null
+    $process = Start-Process powershell -ArgumentList "-NoExit", "-Command", $cmd -PassThru
+    Register-ManagedProcess -Process $process -Title $Title
 }
 
 function Wait-ListeningPort {
@@ -126,6 +144,9 @@ if ($occupiedPorts.Count -gt 0) {
 # 3) Python service terminals (consumers before producers)
 # ---------------------------------------------------------------------------
 Write-Host "`n[3/4] Opening Python service terminals..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Path $RUNTIME_DIR -Force | Out-Null
+$script:ManagedProcesses = @()
+Save-ProcessRegistry
 
 # Decision return path must listen before any candidate can be processed.
 Open-Terminal -Title "1 | Decision TCP     | port 9011" `
@@ -173,6 +194,15 @@ try {
 if ($existingRegistry.StatusCode -ne 200) {
     Open-Terminal -Title "9 | Registry UI      | port 9020" `
                   -Command "python -m gnet_ui.server"
+} else {
+    $registryListener = Get-NetTCPConnection -State Listen -LocalPort 9020 -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($registryListener) {
+        $registryProcess = Get-Process -Id $registryListener.OwningProcess -ErrorAction SilentlyContinue
+        if ($registryProcess) {
+            Register-ManagedProcess -Process $registryProcess -Title "9 | Existing Registry UI | port 9020"
+        }
+    }
 }
 Wait-HttpEndpoint -Url $registryUrl
 

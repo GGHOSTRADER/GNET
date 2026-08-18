@@ -16,6 +16,8 @@
 #include <map>
 #include <string>
 
+#include "fail_fast_socket.hpp"
+
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Ole32.lib")
 
@@ -24,8 +26,7 @@
 #pragma comment(linker, "/EXPORT:GetLastCandidateId=_GetLastCandidateId@4")
 #endif
 
-static SOCKET g_sock = INVALID_SOCKET;
-static bool g_wsa_init = false;
+static FailFastSocket g_client;
 static SRWLOCK g_lock = SRWLOCK_INIT;
 static std::map<std::string, std::string> g_last_candidate_by_instance;
 
@@ -42,47 +43,6 @@ static bool create_candidate_id(char* output, size_t output_size) {
     return count > 0;
 }
 
-static void cleanup_socket() {
-    if (g_sock != INVALID_SOCKET) {
-        closesocket(g_sock);
-        g_sock = INVALID_SOCKET;
-    }
-    if (g_wsa_init) {
-        WSACleanup();
-        g_wsa_init = false;
-    }
-}
-
-static bool ensure_connected() {
-    if (g_sock != INVALID_SOCKET) return true;
-    if (!g_wsa_init) {
-        WSADATA data;
-        if (WSAStartup(MAKEWORD(2, 2), &data) != 0) return false;
-        g_wsa_init = true;
-    }
-    addrinfo hints{};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    addrinfo* result = nullptr;
-    if (getaddrinfo("127.0.0.1", "9012", &hints, &result) != 0) return false;
-    SOCKET candidate = socket(
-        result->ai_family, result->ai_socktype, result->ai_protocol
-    );
-    if (candidate == INVALID_SOCKET) {
-        freeaddrinfo(result);
-        return false;
-    }
-    if (connect(candidate, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) {
-        closesocket(candidate);
-        freeaddrinfo(result);
-        return false;
-    }
-    freeaddrinfo(result);
-    g_sock = candidate;
-    return true;
-}
-
 extern "C" __declspec(dllexport) int __stdcall SendCandidate(
     const char* strategy_id,
     const char* instance_id,
@@ -93,30 +53,20 @@ extern "C" __declspec(dllexport) int __stdcall SendCandidate(
     int direction
 ) {
     if (!strategy_id || !instance_id || !symbol) return -2;
-    AcquireSRWLockExclusive(&g_lock);
+    if (!TryAcquireSRWLockExclusive(&g_lock)) return -1;
     int result = -1;
     char candidate_id[37] = {};
-    if (create_candidate_id(candidate_id, sizeof(candidate_id)) && ensure_connected()) {
+    if (create_candidate_id(candidate_id, sizeof(candidate_id)) &&
+        g_client.ensure_connected("127.0.0.1", 9012)) {
         char line[512];
         int length = _snprintf_s(
             line, sizeof(line), _TRUNCATE, "%s,%s,%s,%s,%d,%d,%d,%d\n",
             strategy_id, instance_id, candidate_id, symbol,
             date, time_s, bar_num, direction
         );
-        if (length > 0) {
-            int sent = 0;
-            while (sent < length) {
-                int count = send(g_sock, line + sent, length - sent, 0);
-                if (count == SOCKET_ERROR || count == 0) {
-                    cleanup_socket();
-                    break;
-                }
-                sent += count;
-            }
-            if (sent == length) {
-                g_last_candidate_by_instance[instance_id] = candidate_id;
-                result = 1;
-            }
+        if (length > 0 && g_client.send_all(line, length)) {
+            g_last_candidate_by_instance[instance_id] = candidate_id;
+            result = 1;
         }
     }
     ReleaseSRWLockExclusive(&g_lock);
@@ -129,7 +79,7 @@ extern "C" __declspec(dllexport) char* __stdcall GetLastCandidateId(
     static thread_local char value[37];
     value[0] = '\0';
     if (!instance_id) return value;
-    AcquireSRWLockShared(&g_lock);
+    if (!TryAcquireSRWLockShared(&g_lock)) return value;
     std::map<std::string, std::string>::const_iterator found =
         g_last_candidate_by_instance.find(instance_id);
     if (found != g_last_candidate_by_instance.end()) {
@@ -140,6 +90,6 @@ extern "C" __declspec(dllexport) char* __stdcall GetLastCandidateId(
 }
 
 BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
-    if (reason == DLL_PROCESS_DETACH) cleanup_socket();
+    if (reason == DLL_PROCESS_DETACH) g_client.shutdown();
     return TRUE;
 }

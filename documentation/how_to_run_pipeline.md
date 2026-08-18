@@ -4,6 +4,15 @@
 The recommended path is the one-command launcher. It opens all nine Python
 services in the correct order; the manual commands below are for debugging.
 
+> [!WARNING]
+> **Start Python before enabling anything in TradeStation.** Wait until
+> `launch.ps1` prints `=== All services launched ===` and verify that TCP ports
+> `9009`, `9010`, `9011`, and `9012` are all listening. If the bar indicator,
+> tick indicator, or strategy is enabled while its Python endpoint is down, the
+> DLLs repeatedly wait and reconnect. This can trap TradeStation in a waiting
+> loop and make `ORPlat.exe` appear frozen. Disable the TradeStation analyses,
+> restore the Python services, and only then enable the components again.
+
 ---
 
 ## Step 1 — Run the Launch Script
@@ -18,6 +27,136 @@ registry page at `http://127.0.0.1:9020`.
 
 If this succeeds, skip directly to Step 6. Steps 2–5 show the equivalent
 manual service startup for debugging.
+
+### Stop or restart all GNET services
+
+`launch.ps1` records the exact service-terminal PIDs it creates. Stop those
+GNET process trees, attempt to disable the watchdog, and verify ports 9009,
+9010, 9011, 9012, and 9020 are released:
+
+```powershell
+.\stop.ps1
+```
+
+The normal stop command intentionally leaves all of the following running:
+
+- Docker Desktop;
+- the `redis1` container;
+- every retained Redis stream and consumer-group offset;
+- TradeStation.
+
+It stops the GNET Python services, their PowerShell hosts, and any active
+`check_gnet_ports.ps1 -Watch` dashboard. It never calls `FLUSHDB`, removes the
+Redis container, or deletes Redis data.
+
+Stop and immediately relaunch the pipeline:
+
+```powershell
+.\restart.ps1
+```
+
+Optional full-infrastructure restart, still without deleting Redis data:
+
+```powershell
+.\restart.ps1 -RestartRedis
+```
+
+`-RestartRedis` stops only the `redis1` container before `launch.ps1` starts it
+again. Docker Desktop remains running and the container's persisted data is
+preserved. To stop GNET plus Redis without relaunching:
+
+```powershell
+.\stop.ps1 -StopRedis
+```
+
+Stop GNET, stop `redis1` without deleting its data, and fully close Docker
+Desktop and its engine to release memory:
+
+```powershell
+.\stop.ps1 -StopDockerDesktop
+```
+
+The next `launch.ps1` run starts Docker Desktop and the preserved `redis1`
+container again.
+
+Request a graceful TradeStation close before relaunching it:
+
+```powershell
+.\restart.ps1 -StopTradeStation
+```
+
+TradeStation is never force-killed: if it needs a save or confirmation, finish
+that interaction manually. `stop.ps1` never flushes or deletes Redis data.
+
+If TradeStation is frozen and cannot close gracefully, inspect the exact
+processes that would be targeted. Run these commands from the GNET repository
+root:
+
+```powershell
+cd C:\Users\g_med\python_new\GNET
+.\kill_tradestation.ps1 -ListOnly
+```
+
+Force-close every process verified by TradeStation installation path or company
+metadata, then confirm none remain:
+
+```powershell
+cd C:\Users\g_med\python_new\GNET
+.\kill_tradestation.ps1
+```
+
+This emergency command can discard unsaved TradeStation workspace changes. It
+does not stop GNET, Docker, Redis, or unrelated applications.
+
+For service terminals created before PID tracking was introduced, `stop.ps1`
+uses a narrow compatibility fallback: it stops only Python/PowerShell command
+lines matching the exact nine GNET module names. Unrelated Python processes are
+not targeted. After the next `launch.ps1`, normal shutdown uses the recorded
+PID plus process start time to protect against PID reuse.
+
+If shutdown prints `Could not disable the watchdog: Access is denied`, the
+service stop still proceeds, but Windows did not permit Scheduled Task control.
+Open an Administrator PowerShell and run:
+
+```powershell
+cd C:\Users\g_med\python_new\GNET
+.\automation\gnet_scheduler_off.ps1
+```
+
+Then run `stop.ps1` again if the watchdog had already restarted any service.
+
+### Destructive Redis hard reset
+
+Normal stop and restart commands preserve Redis. When a deliberately clean
+Redis state is required, `nuke.ps1` stops GNET, verifies the Docker target is
+exactly `redis1`, and permanently removes that container together with every
+stream, consumer group, pending entry, offset, and readiness key inside it.
+
+The script refuses to run without the explicit data-loss acknowledgement:
+
+```powershell
+.\nuke.ps1 -ConfirmDataLoss
+```
+
+Remove the old container and immediately create a fresh empty `redis1` mapped
+to host port 6381:
+
+```powershell
+.\nuke.ps1 -ConfirmDataLoss -RecreateEmptyRedis
+```
+
+This operation cannot be undone unless the Redis container data was separately
+backed up. After resetting Redis, the script gracefully shuts down Docker
+Desktop and its engine. That stops every running container, but only `redis1`
+is removed; unrelated containers and their stored data are not deleted. The
+next `launch.ps1` starts Docker Desktop again.
+
+After removal without recreation, normal `launch.ps1` cannot start Redis until
+the container is recreated:
+
+```powershell
+docker run -d --name redis1 -p 6381:6379 redis
+```
 
 ### Windows watchdog — installation and daily ON/OFF control
 
@@ -146,18 +285,18 @@ Expected output from the router:
 
 ---
 
-## Step 6 — Create the Required EasyLanguage Components
+## Step 6 — Required TradeStation EasyLanguage Components
 
 The Python terminals are only one side of the system. The following three
-EasyLanguage components must exist in TradeStation. Create them in the
-EasyLanguage Development Environment and paste the referenced source into
-each document.
+EasyLanguage documents must exist in TradeStation under these exact saved
+names. The source/documentation column identifies the corresponding repository
+code; the TradeStation name is not the DLL filename.
 
 | TradeStation component | Type | Source | Apply to | DLL / port |
 |---|---|---|---|---|
-| `GNET Bar Sender` | Indicator | [[easylanguage_bar_indicator]] | One 30-second bar chart for the traded symbol | `BarBridge.dll` → 9009 |
-| `GNET Tick Sender` | Indicator | [[easylanguage_tick_indicator]] | One tick chart for the same symbol | `TickBridge.dll` → 9010 |
-| `MA2CrossLE GNET` | Strategy | `EL_files/MA2CrossLE_GNET.els` | Every chart/window that runs the MA strategy | `StrategyBridge.dll` → 9012 and `SignalBridge.dll` ← 9011 |
+| `g_cpp_dll_bar` | Indicator | `EL_files/g_cpp_dll_bar.els` | One 30-second bar chart for the traded symbol | `BarBridge.dll` → 9009 |
+| `g_cpp_dll_tick` | Indicator | `EL_files/g_cpp_dll_tick.els` | One tick chart for the same symbol | `TickBridge.dll` → 9010 |
+| `G_MA_CROSS_NN` | Strategy | `EL_files/G_MA_CROSS_NN.els` | Every chart/window that runs the MA strategy | `StrategyBridge.dll` → 9012 and `SignalBridge.dll` ← 9011 |
 
 The MA strategy already contains both candidate sending and decision polling.
 Do **not** apply the old `RecvSignal` connection-test indicator as a separate
@@ -188,7 +327,7 @@ See [[how_to_compile_dll]] if any DLL needs to be rebuilt.
 ### Central bar chart
 
 1. Open a 30-second chart for the symbol used by the strategy.
-2. Apply `GNET Bar Sender` once.
+2. Apply the `g_cpp_dll_bar` indicator once.
 3. Confirm its bar interval matches the model's live feature interval.
 
 This chart supplies OHLC, VWAP, tick-volume proxies, symbol, date, time, and
@@ -198,7 +337,7 @@ strategy window unless a different symbol or bar series needs its own data.
 ### Central tick chart
 
 1. Open a tick chart for the same symbol.
-2. Apply `GNET Tick Sender` once.
+2. Apply the `g_cpp_dll_tick` indicator once.
 
 This chart supplies the tick stream used by the volume-profile process. The
 current MA model does not consume volume-profile features, but the tick sender
@@ -206,8 +345,8 @@ is required when running that part of the pipeline.
 
 ### MA strategy windows
 
-1. Create a new TradeStation Strategy document named `MA2CrossLE GNET`.
-2. Paste the contents of `EL_files/MA2CrossLE_GNET.els` and compile it.
+1. Open the saved TradeStation strategy `G_MA_CROSS_NN`.
+2. Its repository backup is `EL_files/G_MA_CROSS_NN.els`; re-paste and compile that source when restoring or updating the strategy.
 3. Apply it to every chart that should run the MA crossover strategy.
 4. Keep `StrategyId` set to `MA2CrossLE`; this selects the model registry entry.
 5. Give every applied strategy window a unique, stable `InstanceId`.
@@ -233,12 +372,26 @@ order settings before enabling live orders.
 
 ## Step 8 — Start and Verify the Complete System
 
-Start `launch.ps1` first and wait for the service-readiness checks. Then open
-or enable the TradeStation charts in this order:
+**Do not enable any GNET TradeStation component yet.** Start `launch.ps1` first
+and wait until it prints `=== All services launched ===`. Confirm all four DLL
+endpoints before proceeding:
 
-1. `GNET Bar Sender`
-2. `GNET Tick Sender` when the volume-profile pipeline is required
-3. Each `MA2CrossLE GNET` strategy window
+```powershell
+.\check_gnet_ports.ps1 -Watch
+```
+
+The live dashboard refreshes every ten seconds until `Ctrl+C` is pressed. It
+must show `READY` before TradeStation is enabled. Run the same command without
+`-Watch` for a one-time check that exits with status `0` when ready or `1` when
+one or more ports are missing. Seeing only one or some endpoints is not ready.
+Enabling the EasyLanguage components before all four endpoints are available
+can leave TradeStation stuck in the DLL connection/retry loop.
+
+After the four-port check passes, enable the TradeStation charts in this order:
+
+1. `g_cpp_dll_bar`
+2. `g_cpp_dll_tick` when the volume-profile pipeline is required
+3. Each `G_MA_CROSS_NN` strategy window
 
 After the 60-bar feature warm-up, an MA crossover should follow this path:
 

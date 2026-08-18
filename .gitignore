@@ -6,6 +6,9 @@ __pycache__/
 # Tests
 .pytest_cache/
 
+# Local runtime PID registry
+/.runtime/
+
 # Obsidian
 .obsidian/
 
@@ -22,6 +25,10 @@ __pycache__/
 # Reports
 report_rl_transformer.pdf
 report_pipeline.md
+
+# Local historical volume-profile exports
+/historical_vp/raw/
+/historical_vp/prepared/
 
 # wandb
 training_mlp/wandb/

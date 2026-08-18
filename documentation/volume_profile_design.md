@@ -1,27 +1,43 @@
 # Volume Profile Pipeline
-> **What:** Full design and API reference for `volume_profile.py` — stateful session volume profile, O(1) per bar, with POC and Value Area computed from Redis bar stream.
+> **What:** Canonical state and mathematics shared across live and historical processing, with a thin Redis publishing adapter.
 
-**File:** `feat_files/volume_profile.py`
+**Canonical domain:** `feat_files/canonical_volume_profile.py`
+
+**Live Redis adapter:** `feat_files/volume_profile.py`
 **Run:** `python -m feat_files.volume_profile`
 
 ---
 
 ## What It Does
 
-Reads tick data from Redis1 in real time and maintains a stateful Volume Profile for the current trading session. The profile updates on every tick. The current gate emits a snapshot for every tick timestamped in the final second, so an interval may contain multiple snapshots.
+`canonical_volume_profile.py` owns session mapping, mutable profile state,
+incremental total/Up/Down grids, POC, Value Area, the 32-feature candidate contract, and
+`VolumeProfileResult`. It has no Redis, TCP, filesystem, or clock I/O.
+
+`volume_profile.py` reads validated ticks from Redis, calls
+`VolumeProfileEngine.update()` for every tick, chooses when to call
+`snapshot()`, encodes scalar results, and publishes them. The profile resets at
+18:00 in the TradeStation chart time zone and remains continuous across
+midnight. The current gate emits a snapshot for every tick timestamped in the
+final second, so an interval may contain multiple snapshots.
 
 Data arriving from Redis is already validated at ingestion (`tick_validator.py` + `tick_codec.py`). This file just reads and casts.
 
-Session resets automatically when the date changes (new trading day).
+The session key rolls at 18:00. A calendar-date change at midnight does not
+reset the profile.
 
 ---
 
 ## Design: Stateful Incremental Profile
 
-Grid is pre-allocated at session start (`range_ticks + 1` zeros) centered on the first bar's close. Each subsequent bar does a single:
+Three parallel grids are pre-allocated at session start (`range_ticks + 1`
+zeros) for total, Up, and Down volume, centered on the first tick price. Each
+tick updates the matching price index:
 
 ```python
 profile[index] += volume   # one C op, no rebuild ever
+up_profile[index] += up
+down_profile[index] += down
 ```
 
 Grid extension only happens if price breaks outside the pre-allocated range. Extension adds 15% of `range_ticks` in the direction of the break via `np.concatenate`. On a typical session with 400 ticks pre-allocated this almost never fires. Even on trend days the 15% buffer absorbs most moves.
@@ -119,7 +135,8 @@ Emitted on every qualifying tick in the final second; multiple records per inter
 | `tick_size` | `float` | No | Fixed at session init. |
 | `range_ticks` | `int` | No | Fixed at session init. Used to compute 15% extension size. |
 | `symbol` | `str` | No | Set at init from first tick. |
-| `date` | `int` | No | Set at init. Session resets when this changes. |
+| `date` | `int` | **Yes** | Calendar date of the latest tick; retained for exact joins. |
+| `session_key` | `int` | No | Following trading date for ticks at/after 18:00; controls session resets. |
 | `bar_num` | `int` | **Yes** | Updated to the latest tick's bar_num on every `_update`. |
 | `n_bars` | `int` | **Yes** | Incremented by 1 on every `_update`. |
 | `extensions` | `int` | **Yes** | Incremented each time the grid is extended. |
@@ -128,13 +145,14 @@ Emitted on every qualifying tick in the final second; multiple records per inter
 
 **What is NOT in state:** POC, Value Area, and all other derived features (entropy, kurtosis, concentration, etc.) are not stored — they are derived fresh on every `_snapshot` call directly from `profile` using `np.argmax`, `np.argsort`, and `_compute_derived_features`. The full `profile` array remains the only source of truth for the distribution itself. The one exception is `prev_poc_price`, which `_snapshot` persists back into state purely so the *next* snapshot can compute `poc_migration`.
 
-**Lifetime:** state lives in Python heap for the duration of the session. No disk persistence. On date change `stream_volume_profile` replaces the old `_SessionState` with a fresh one — previous session data is discarded.
+**Lifetime:** state lives in Python heap for the duration of the session. No disk persistence. At the first tick at or after 18:00, `stream_volume_profile` replaces the old `_SessionState` with a fresh one — previous session data is discarded. Midnight remains inside the same session.
 
 ---
 
 ## Storage
 
-All state held in memory in `_SessionState`. No persistence. Reset on date change.
+All state is held in memory in `_SessionState`. There is no persistence. The
+reset occurs at the 18:00 ES session boundary in the chart time zone.
 
 ---
 

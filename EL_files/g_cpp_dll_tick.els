@@ -1,0 +1,50 @@
+// EasyLanguage Tick DLL Indicator
+// Sends tick data to the Python TCP server through TickBridge.dll.
+
+using elsystem;
+
+Vars:
+    yyyymmdd(0),
+    bar_num(0),
+    ok(0),
+    last_connection_state(-1),
+    TimeSpan hhmmss(null);
+
+{ 8 fields: symbol, date, time, high, low, up, down, bar_num }
+External: "C:\Users\g_med\python_new\GNET\EL_files\TickBridge.dll", int, "SendTick",
+    Lpstr,      { symbol }
+    int,        { yyyymmdd }
+    int,        { hhmmss }
+    double,     { high }
+    double,     { low }
+    int,        { up }
+    int,        { down }
+    int;        { bar_num }
+
+{ Fire on every live tick, but never replay historical chart bars into TCP. }
+If LastBarOnChart Then Begin
+    yyyymmdd = Date;
+    hhmmss = BarDateTime.TimeOfDay;
+    bar_num = CurrentBar;
+
+    ok = SendTick(
+        Symbol,
+        yyyymmdd,
+        IntPortion(hhmmss.TotalSeconds),
+        High,
+        Low,
+        UpTicks,
+        DownTicks,
+        bar_num
+    );
+
+    If ok <> last_connection_state Then Begin
+        If ok = 1 Then
+            Print(Time, " GNET tick bridge connected")
+        Else
+            Print(Time, " GNET tick bridge unavailable; retry is throttled");
+        last_connection_state = ok;
+    End;
+End;
+
+Plot1(bar_num, "bar num", Red);

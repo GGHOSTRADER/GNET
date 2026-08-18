@@ -11,9 +11,9 @@ flowchart TD
     PARSE["parse_xread_to_ticks() - tick_codec.py - decode + cast only - already validated by tick_validator.py"]
 
     FIRST{"first tick of session?"}
-    INIT["_init_session() - pre-allocate profile array of zeros - range_ticks + 1 levels - centered on first tick.high"]
+    INIT["initialize_profile() - canonical_volume_profile.py - pre-allocate centered profile grid"]
 
-    UPDATE["_update() - snap tick.high to tick grid - compute index - O(1) common case - track last_price"]
+    UPDATE["update_profile() - canonical_volume_profile.py - snap price and update O(1)"]
     BOUNDS{"index within grid?"}
     ADD["profile[index] += volume - single C op"]
 
@@ -22,12 +22,12 @@ flowchart TD
 
     GATE{"tick.time_s % snapshot_interval_s == snapshot_interval_s - 1 ?"}
 
-    SNAPSHOT["_snapshot() - derive price_levels from min_price + arange - profile.copy()"]
-    POC["_find_poc() - np.argmax"]
-    VA["_find_value_area() - np.argsort + np.cumsum - 70 percent value area"]
-    DERIVED["_compute_derived_features() - poc_distance - poc_concentration - va_width - va_position - vol_above_poc_ratio - profile_entropy - profile_kurtosis - poc_migration (vs prev_poc_price)"]
+    SNAPSHOT["snapshot_profile() - canonical_volume_profile.py - immutable snapshot arrays"]
+    POC["find_poc() - canonical math - np.argmax"]
+    VA["find_value_area() - canonical math - 70 percent coverage"]
+    DERIVED["canonical feature contract - 32 VP features - classified delta - shape - nodes - velocity"]
 
-    RESULT["VolumeProfileResult - metadata - profile arrays - POC - Value Area - total volume - n_bars - extensions - 8 derived features"]
+    RESULT["VolumeProfileResult - total, Up, Down, and delta arrays - POC - Value Area - 32 scalar features"]
 
     REDIS_OUT[("Redis Stream - features_volume_profile - scalar fields only - may contain multiple entries per interval")]
 
@@ -60,13 +60,13 @@ flowchart TD
         PARSE
     end
 
-    subgraph APPLICATION ["Application - session lifecycle + snapshot cadence"]
+    subgraph APPLICATION ["Live application - volume_profile.py - Redis lifecycle + snapshot cadence"]
         FIRST
         INIT
         GATE
     end
 
-    subgraph DOMAIN ["Domain - Stateful Profile - update O(1) per tick, snapshot on every qualifying final-second tick"]
+    subgraph DOMAIN ["Canonical domain - canonical_volume_profile.py - shared by live and historical replay"]
         UPDATE
         BOUNDS
         ADD

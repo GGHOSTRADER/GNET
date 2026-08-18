@@ -32,7 +32,9 @@ flowchart TD
     REDIS -->|"validated_bar"| TF["transformer_features.py - Redis orchestration and publishing"]
     TF -->|"in-process library call"| CANONICAL["canonical_features.py - FeatureEngine - 13 MA formulas"]
     CANONICAL -.->|"13 FeatureValues returned"| TF
-    REDIS -->|"tick_data_validated"| VP["volume_profile.py - update per tick - snapshots on qualifying final-second ticks"]
+    REDIS -->|"tick_data_validated"| VP["volume_profile.py - Redis adapter and snapshot cadence"]
+    VP -->|"in-process library call"| CANONICAL_VP["canonical_volume_profile.py - total, Up, Down state - POC - Value Area - 32 features"]
+    CANONICAL_VP -.->|"VolumeProfileResult"| VP
 
     TF -->|"features_transformer"| REDIS
     VP -->|"features_volume_profile - qualifying final-second ticks"| REDIS
@@ -60,7 +62,7 @@ flowchart TD
     WATCHDOG -.-> TF
 
     class BAR_DLL,BAR_SERVER,TF,CANONICAL,TRAINING,ARTIFACTS,REGISTRY barPath
-    class TICK_DLL,TICK_SERVER,VALIDATOR,VP tickPath
+    class TICK_DLL,TICK_SERVER,VALIDATOR,VP,CANONICAL_VP tickPath
     class TS,REDIS,UI,WATCHDOG sharedPath
     class STRATEGY_DLL,CANDIDATE_SERVER,ROUTER,SIG_SERVER,SIG_DLL strategyPath
     class LEGEND_BAR barPath

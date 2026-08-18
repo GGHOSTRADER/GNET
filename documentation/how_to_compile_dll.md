@@ -42,6 +42,22 @@ If a dedicated "x86 Native Tools Command Prompt for VS" shortcut isn't available
 
 ## Step 4 — Compile the DLLs
 
+### Preferred coordinated build
+
+The four bridges share `fail_fast_socket.hpp`, so rebuild them together from
+the repository root whenever that socket layer changes:
+
+```powershell
+.\EL_files\build_hardened.cmd
+```
+
+This selects the x86 toolchain and stages all four results under
+`EL_files\build_hardened\`. Close TradeStation before copying the staged DLLs
+over the active files in `EL_files`; Windows will not safely replace a DLL that
+is loaded in `ORPlat.exe`.
+
+The individual compiler commands below remain useful for isolated development.
+
 Navigate to the EL_files folder, then compile whichever DLL you need:
 
 ```bash
@@ -104,7 +120,13 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 
 ## Notes
 
-- All DLLs connect to `127.0.0.1` — Python processes must be running before TradeStation loads the DLL
+- All DLLs connect to `127.0.0.1`.
+- The hardened socket layer uses non-blocking established sockets, caps each
+  connection attempt at 2 ms, and waits 2 seconds after a failure before
+  retrying. A missing Python endpoint therefore returns control to TradeStation
+  instead of trapping its chart thread in a connection loop.
+- The sender DLLs intentionally drop a payload when the endpoint or socket is
+  unavailable; they do not create an unbounded queue inside TradeStation.
 - `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
 - `SignalBridge` queues decisions by strategy ID and uses non-blocking recv — each window can retrieve only its own decision
 - See [[how_to_run_pipeline]] for the correct start order

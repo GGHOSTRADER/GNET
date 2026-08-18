@@ -174,6 +174,49 @@ def test_signal_server_acknowledges_only_after_socket_delivery():
     assert events == ["send", "ack"]
 
 
+def test_signal_server_handles_empty_pending_batch_before_new_decision():
+    class StopLoop(Exception):
+        pass
+
+    class FakeConnection:
+        def __init__(self, events):
+            self.events = events
+
+        def send(self, data):
+            self.events.append("send")
+            return len(data)
+
+    class FakeRedis:
+        def __init__(self, fields, events):
+            self.fields = fields
+            self.events = events
+            self.requested_ids = []
+
+        def xreadgroup(self, *args, **kwargs):
+            requested_id = next(iter(args[2].values()))
+            self.requested_ids.append(requested_id)
+            if len(self.requested_ids) == 1:
+                return [["trade_decisions", []]]
+            if len(self.requested_ids) == 2:
+                return [["trade_decisions", [["201-0", self.fields]]]]
+            raise StopLoop
+
+        def xack(self, stream, group, entry_id):
+            self.events.append("ack")
+
+    core = RouterCore({"MA2CrossLE": lambda fields: (True, 0.8)})
+    core.on_feature(_features())
+    fields = core.on_candidate(_candidate())[0]
+    events = []
+    redis_client = FakeRedis(fields, events)
+
+    with pytest.raises(StopLoop):
+        _serve(FakeConnection(events), ("local", 1), redis_client)
+
+    assert redis_client.requested_ids[:2] == ["0-0", ">"]
+    assert events == ["send", "ack"]
+
+
 def test_symbol_contract_accepts_tradestation_continuous_symbol():
     candidate = parse_candidate_line(
         "MA2CrossLE,MA-ES-01,guid-1,@ES,1260816,36000,101,1"
