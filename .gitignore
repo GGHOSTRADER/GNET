@@ -29,6 +29,7 @@ report_pipeline.md
 # Local historical volume-profile exports
 /historical_vp/raw/
 /historical_vp/prepared/
+/historical_vp/features/
 
 # wandb
 training_mlp/wandb/

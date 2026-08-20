@@ -105,11 +105,12 @@ python 30_training_mlp.py
 
 This script:
 1. Loads `df_features_labeled.csv`
-2. Splits into CV pool (90%) + held-out test set (10%) with an 80-bar embargo gap
-3. Runs 5-fold purged-embargo walk-forward cross-validation
-4. Trains an MLP on each fold, saves per-fold weights and scalers
-5. Selects the best fold by validation AUC
-6. Saves `model_best.pt` and `scaler_best.pkl` under the configured strategy model directory
+2. Requires each label's entry timestamp and actual close timestamp (`t1`)
+3. Reserves the chronological final 10% and purges training labels overlapping it
+4. Runs event-aware purged expanding walk-forward cross-validation
+5. Trains an MLP on each fold, saves per-fold weights and scalers
+6. Selects the best fold by validation AUC
+7. Saves `model_best.pt` and `scaler_best.pkl` under the configured strategy model directory
 
 Expected output:
 ```
@@ -137,9 +138,13 @@ Default artifact directory: `training_mlp/strategies/MA2CrossLE/model/mlp_baseli
 | `LR` | `1e-3` | Peak learning rate |
 | `PATIENCE` | `15` | Early stopping patience |
 | `N_SPLITS` | `5` | Number of CV folds |
-| `PURGE_BARS` | `20` | Bars purged at each fold boundary |
-| `EMBARGO_BARS` | `60` | Bars embargoed after each fold |
+| `EMBARGO_PCT` | `0.01` | López de Prado observation-count embargo fraction |
 | `TEST_SIZE` | `0.10` | Fraction held out as frozen test |
+
+The MA splitter purges from actual `[Date/Time, t1]` label intervals. `t1` is
+validation metadata and is never included in `FEATURE_COLS` or passed to the
+MLP. The fixed `PURGE_BARS` and `EMBARGO_BARS` variables remain only for legacy
+Zona trainers until those datasets are migrated.
 
 ---
 

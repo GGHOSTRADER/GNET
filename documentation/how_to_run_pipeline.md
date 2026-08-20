@@ -387,6 +387,34 @@ one or more ports are missing. Seeing only one or some endpoints is not ready.
 Enabling the EasyLanguage components before all four endpoints are available
 can leave TradeStation stuck in the DLL connection/retry loop.
 
+The bar and tick TCP servers remain bound after a DLL disconnect. They discard
+any incomplete line from the old connection, return to `accept()`, and wait for
+the hardened DLL to reconnect. A chart reload or TradeStation restart therefore
+does not require terminals 7 and 8 to be relaunched.
+
+### Why the reconnect loop is required
+
+Previously, each ingestion process called `accept()` exactly once. When a chart
+was disabled, a workspace reloaded, or TradeStation restarted, `recv()` returned
+an empty payload or raised a connection-reset error. The handler ended, the
+Python process exited, and its port disappeared even though the PowerShell
+window could still contain old output. TradeStation then retried a dead endpoint
+until terminal 7 or 8 was started manually.
+
+Both servers now keep the listening socket open for the lifetime of the Python
+process:
+
+```text
+accept client → receive complete lines → client disconnects
+              → close that client → reset its byte buffer → accept next client
+```
+
+Only newline-terminated records are written to Redis. An incomplete trailing
+record belongs to the disconnected TCP session and is intentionally discarded;
+it is never joined to bytes from the replacement connection. Socket disconnects
+are handled locally, while Redis or programming failures still surface instead
+of being hidden by a broad exception handler.
+
 After the four-port check passes, enable the TradeStation charts in this order:
 
 1. `g_cpp_dll_bar`

@@ -55,3 +55,13 @@ Successful output includes:
 - `manifest_partitions.csv`: one compact row per selected trading session,
   including its compressed Parquet byte size.
 - `parquet/`: the deduplicated session partitions used by historical VP replay.
+
+The next stage is now implemented. Run the prepared partitions through the
+canonical VP engine with:
+
+```powershell
+python -m training_mlp.replay_historical_vp --workers 4
+```
+
+See [historical_vp_features.md](historical_vp_features.md) for snapshot
+semantics and generated feature outputs.

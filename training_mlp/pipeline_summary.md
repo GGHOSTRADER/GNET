@@ -6,10 +6,10 @@
 
 ## Validation strategy
 - **Temporal train/val/test split** — no random shuffling, always chronological
-- **Purge** (20 bars = 10 min) — removes train samples whose rolling features overlap with the val boundary
-- **Embargo** (60 bars = 30 min) — gap between val end and next fold's train start to prevent serial correlation leakage
-- **Walk-forward CV** (5 folds) — expanding train window, fixed val window
-- **Held-out test set** — last 10% of data, frozen until final evaluation, also gapped from CV pool
+- **Event-aware purge** — removes training labels whose `[entry_time, t1]` information intervals overlap validation
+- **Embargo** — López de Prado observation-count percentage, configured by `EMBARGO_PCT`
+- **Walk-forward CV** — expanding past-only train window and subsequent fixed validation window
+- **Held-out test set** — last 10% of data, frozen until final evaluation; overlapping training labels are purged by `t1`
 
 ## Model
 - **MLP** — 2 hidden layers (64 → 32), BatchNorm + ReLU + Dropout (0.3)

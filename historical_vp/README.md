@@ -2,10 +2,9 @@
 
 This folder holds the large TradeStation tick exports and the generated,
 compressed dataset used to reconstruct historical volume profiles. The
-preparation module validates and deduplicates ticks; it does **not** calculate
-POC, Value Area, or training features yet. The canonical mathematics now lives
-in `feat_files/canonical_volume_profile.py`; the next historical step is to
-replay the prepared Parquet ticks through that exact engine.
+preparation module validates and deduplicates ticks. The replay module then
+passes every prepared tick through `feat_files/canonical_volume_profile.py` and
+writes the complete 32-feature VP contract once per 30-second interval.
 
 See the [preparation flow diagram](../diagrams/historical_vp_preparation.mmd)
 for the complete data path.
@@ -32,14 +31,38 @@ historical_vp/
 │   ├── volumeprof4.txt
 │   ├── volumeprof5.txt
 │   └── ...                       # Any volumeprof<number>.txt is discovered
-└── prepared/                    # Generated files; ignored by Git
+├── prepared/                    # Generated files; ignored by Git
     ├── parquet/
     │   └── session_date=YYYY-MM-DD/
     │       └── ticks.parquet    # One final file per 18:00 trading session
     ├── manifest.json
     ├── manifest_partitions.csv
     └── .staging/                # Retained only when intervention is needed
+└── features/                    # Canonical VP features; ignored by Git
+    ├── parquet/
+    │   └── session_date=YYYY-MM-DD/
+    │       └── vp_features.parquet
+    ├── manifest.json
+    └── manifest_partitions.csv
 ```
+
+## Canonical Offline Feature Engineering
+
+After preparation succeeds, run:
+
+```powershell
+python -m training_mlp.replay_historical_vp --workers 4
+```
+
+The profile updates on every tick. Within each interval, the replay retains the
+freshest tick timestamped in the final second (`time_s % 30 == 29`) and commits
+temporal history exactly once. This reproduces just-in-time freshness without
+collapsing `recent_*`, POC velocity, or Value Area expansion features to a
+tick-to-tick horizon.
+
+See [historical VP feature replay](../documentation/historical_vp_features.md)
+for output columns, validation, rerun behavior, and the current live-parity
+follow-up.
 
 ## Setup and Normal Run
 

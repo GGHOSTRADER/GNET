@@ -22,6 +22,23 @@ except ImportError:  # Direct execution from inside training_mlp.
     from pipeline_paths import INPUTS_DIR, PROCESSED_DIR, TRADES_FILE, BARS_FILE, FEATURES_FILE as OUTPUT_FILE
 from feat_files.canonical_features import FEATURE_NAMES, FeatureEngine
 
+
+def _parse_tradestation_timestamps(values):
+    """Parse normal timestamps and TradeStation's midnight date-only form."""
+    text = values.astype(str).str.strip()
+    parsed = pd.to_datetime(
+        text,
+        format="%m/%d/%Y %I:%M:%S %p",
+        errors="coerce",
+    )
+    date_only = text.str.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}")
+    parsed.loc[date_only] = pd.to_datetime(
+        text.loc[date_only],
+        format="%m/%d/%Y",
+        errors="coerce",
+    )
+    return parsed
+
 # ── 1. LOADERS ────────────────────────────────────────────────────────────────
 
 def load_bars(filepath):
@@ -44,18 +61,61 @@ def load_trades(filepath):
         .str.replace(r"[$,%()]", "", regex=True).str.strip()
     )
     df["% Profit"]  = pd.to_numeric(df["% Profit"], errors="coerce")
-    df["Date/Time"] = pd.to_datetime(df["Date/Time"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
-    return df.dropna(subset=["Date/Time"]).reset_index(drop=True)
+    df["_timestamp"] = _parse_tradestation_timestamps(df["Date/Time"])
+    return df.reset_index(drop=True)
 
 
 # ── 2. METALABELING ───────────────────────────────────────────────────────────
 
 def metalabel(df, signal):
-    entries = df[df["Signal"] == signal][["Date/Time", "% Profit"]].copy()
+    rows = []
+    seen_trade_ids = set()
+    position = 0
+    while position < len(df):
+        entry = df.iloc[position]
+        if pd.isna(entry["#"]):
+            raise ValueError(
+                f"TradeStation row {position} is an exit without a numbered entry."
+            )
+        if position + 1 >= len(df):
+            raise ValueError(f"Trade {entry['#']} has no following closing row.")
+        close = df.iloc[position + 1]
+        if pd.notna(close["#"]):
+            raise ValueError(
+                f"Trade {entry['#']} is followed by another entry instead of a close."
+            )
+
+        trade_id = int(entry["#"])
+        if trade_id in seen_trade_ids:
+            raise ValueError(f"TradeStation trade number {trade_id} is duplicated.")
+        seen_trade_ids.add(trade_id)
+        entry_time = entry["_timestamp"]
+        close_time = close["_timestamp"]
+
+        if pd.isna(close_time) and str(close["Date/Time"]).strip().lower() == "open":
+            position += 2
+            continue
+        if pd.isna(entry_time) or pd.isna(close_time):
+            raise ValueError(f"Trade {trade_id} has an invalid entry or close timestamp.")
+        if close_time < entry_time:
+            raise ValueError(f"Trade {trade_id} closes before it enters.")
+
+        if entry["Signal"] == signal:
+            if pd.isna(entry["% Profit"]):
+                raise ValueError(f"Completed trade {trade_id} has no profit label.")
+            rows.append(
+                {
+                    "Date/Time": entry_time,
+                    "t1": close_time,
+                    "Label": int(float(entry["% Profit"]) > 0.0),
+                }
+            )
+        position += 2
+
+    entries = pd.DataFrame(rows, columns=["Date/Time", "t1", "Label"])
     if entries.empty:
         raise ValueError(f"Signal '{signal}' not found.")
-    entries["Label"] = (entries["% Profit"] > 0).astype(int)
-    return entries[["Date/Time", "Label"]].dropna().reset_index(drop=True)
+    return entries.reset_index(drop=True)
 
 
 # ── 3. FEATURE ENGINEERING ────────────────────────────────────────────────────
@@ -102,7 +162,7 @@ def merge_and_export(features_df, labels_df, output_path):
     df["Label"] = label
     df = df.dropna().reset_index(drop=True)
     df.to_csv(output_path, index=False)
-    print(f"Saved → {output_path}")
+    print(f"Saved -> {output_path}")
     return df
 
 

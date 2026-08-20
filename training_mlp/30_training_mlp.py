@@ -16,6 +16,19 @@ from dotenv import load_dotenv
 import os
 load_dotenv(Path(__file__).parent / ".env")
 
+try:
+    from training_mlp.validation import (
+        EventIntervals,
+        PurgedWalkForward,
+        purged_chronological_holdout,
+    )
+except ModuleNotFoundError:  # Direct execution from inside training_mlp.
+    from validation import (
+        EventIntervals,
+        PurgedWalkForward,
+        purged_chronological_holdout,
+    )
+
 from pipeline_paths import FEATURES_FILE as DATA_FILE, MODEL_DIR as OUTPUT_DIR
 RANDOM_SEED    = int(os.getenv("RANDOM_SEED",    "42"))
 BATCH_SIZE     = int(os.getenv("BATCH_SIZE",     "64"))
@@ -24,8 +37,7 @@ LR             = float(os.getenv("LR",           "1e-3"))
 LR_MIN         = float(os.getenv("LR_MIN",       "1e-6"))
 WARMUP_EPOCHS  = int(os.getenv("WARMUP_EPOCHS",  "10"))
 N_SPLITS       = int(os.getenv("N_SPLITS",       "5"))
-EMBARGO_BARS   = int(os.getenv("EMBARGO_BARS",   "60"))
-PURGE_BARS     = int(os.getenv("PURGE_BARS",     "20"))
+EMBARGO_PCT    = float(os.getenv("EMBARGO_PCT",  "0.01"))
 PATIENCE       = int(os.getenv("PATIENCE",       "15"))
 WEIGHT_DECAY   = float(os.getenv("WEIGHT_DECAY", "1e-2"))
 TEST_SIZE      = float(os.getenv("TEST_SIZE",    "0.10"))
@@ -42,32 +54,6 @@ FEATURE_COLS = [
     "amihud_illiquidity", "vwap_distance",
     "minutes_since_open", "is_first_last_30min", "day_of_week",
 ]
-
-# ── 1. SPLITS ─────────────────────────────────────────────────────────────────
-
-def split_test(X, y, test_size, purge, embargo):
-    n_total = len(X)
-    n_test  = int(n_total * test_size)
-    gap     = purge + embargo
-    n_cv    = n_total - n_test - gap
-    if n_cv <= 0:
-        raise ValueError(f"Dataset too small for test split + gap of {gap} bars.")
-    return X[:n_cv], y[:n_cv], X[n_cv + gap:], y[n_cv + gap:]
-
-
-def purged_embargo_splits(n_samples, n_splits, purge, embargo):
-    indices   = np.arange(n_samples)
-    fold_size = n_samples // (n_splits + 1)
-    for i in range(1, n_splits + 1):
-        val_start = i * fold_size
-        val_end   = val_start + fold_size
-        train_end = val_start - purge
-        train_idx = indices[:max(train_end, 0)]
-        val_idx   = indices[val_start:val_end]
-        if len(train_idx) == 0 or len(val_idx) == 0:
-            continue
-        yield train_idx, val_idx, val_end + embargo
-
 
 # ── 2. MODEL ──────────────────────────────────────────────────────────────────
 
@@ -179,14 +165,27 @@ def run():
     print(f"Output dir: {out_dir.resolve()}")
 
     df = pd.read_csv(DATA_FILE).dropna().reset_index(drop=True)
+    if "t1" not in df.columns:
+        raise ValueError(
+            "Labeled dataset has no t1 column. Run study_pipeline.py to "
+            "regenerate event-aware labels before training."
+        )
+    event_starts = pd.to_datetime(df["Date/Time"], errors="raise")
+    event_ends = pd.to_datetime(df["t1"], errors="raise")
+    events = EventIntervals.from_arrays(event_starts, event_ends)
     X  = df[FEATURE_COLS].values.astype(np.float32)
     y  = df["Label"].values.astype(np.float32)
 
-    X_cv, y_cv, X_test, y_test = split_test(X, y, TEST_SIZE, PURGE_BARS, EMBARGO_BARS)
-    gap = PURGE_BARS + EMBARGO_BARS
+    holdout = purged_chronological_holdout(events, test_size=TEST_SIZE)
+    X_cv, y_cv = X[holdout.train_indices], y[holdout.train_indices]
+    X_test, y_test = X[holdout.test_indices], y[holdout.test_indices]
+    cv_events = EventIntervals.from_arrays(
+        event_starts.iloc[holdout.train_indices],
+        event_ends.iloc[holdout.train_indices],
+    )
     print(f"\nTotal   : {len(X)} samples")
     print(f"CV pool : {len(X_cv)} samples")
-    print(f"Gap     : {gap} bars discarded ({gap * 30 // 60} min)")
+    print(f"Purged  : {len(holdout.purged_indices)} labels overlapping test")
     print(f"Test    : {len(X_test)} samples — frozen until evaluate.py")
 
     np.save(out_dir / "X_test.npy", X_test)
@@ -199,9 +198,9 @@ def run():
         "epochs": EPOCHS, "batch_size": BATCH_SIZE,
         "lr": LR, "lr_min": LR_MIN, "warmup_epochs": WARMUP_EPOCHS,
         "weight_decay": WEIGHT_DECAY, "patience": PATIENCE,
-        "n_splits": N_SPLITS, "purge_bars": PURGE_BARS,
-        "embargo_bars": EMBARGO_BARS, "test_size": TEST_SIZE,
-        "cv_test_gap_bars": gap, "cv_test_gap_mins": gap * 30 // 60,
+        "n_splits": N_SPLITS, "embargo_pct": EMBARGO_PCT,
+        "test_size": TEST_SIZE,
+        "holdout_purged_events": len(holdout.purged_indices),
         "n_features": len(FEATURE_COLS), "n_samples": len(X),
         "n_cv": len(X_cv), "n_test": len(X_test),
         "naive_acc": naive_acc, "feature_cols": FEATURE_COLS,
@@ -216,12 +215,14 @@ def run():
     best_model_state = None
     best_scaler      = None
 
+    splitter = PurgedWalkForward(n_splits=N_SPLITS, embargo_pct=EMBARGO_PCT)
     fold_bar = tqdm(
-        enumerate(purged_embargo_splits(len(X_cv), N_SPLITS, PURGE_BARS, EMBARGO_BARS)),
-        total=N_SPLITS, desc="Folds", unit="fold"
+        enumerate(splitter.split(cv_events)),
+        total=splitter.get_n_splits(), desc="Folds", unit="fold"
     )
 
-    for fold, (train_idx, val_idx, _) in fold_bar:
+    for fold, split in fold_bar:
+        train_idx, val_idx = split.train_indices, split.test_indices
         X_train, X_val = X_cv[train_idx], X_cv[val_idx]
         y_train, y_val = y_cv[train_idx], y_cv[val_idx]
 

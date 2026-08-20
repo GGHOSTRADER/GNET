@@ -135,6 +135,27 @@ def test_poc_velocity_uses_five_snapshot_displacement():
     assert result.poc_velocity_5 == pytest.approx(1.0)
 
 
+def test_preview_snapshot_does_not_advance_interval_history():
+    engine = VolumeProfileEngine(tick_size=0.25, range_ticks=20)
+    engine.update(TickStub(high=5000.0, up=5, down=1, bar_num=1))
+
+    first_preview = engine.snapshot(commit=False)
+    state = engine.state
+    assert state is not None
+    assert state.prev_poc_price is None
+    assert state.prev_snapshot_total_volume == 0.0
+    assert state.poc_history == []
+
+    engine.update(TickStub(high=5000.25, up=2, down=0, bar_num=2))
+    freshest_preview = engine.snapshot(commit=False)
+    assert freshest_preview.total_volume > first_preview.total_volume
+    assert state.prev_snapshot_total_volume == 0.0
+
+    committed = engine.snapshot()
+    assert committed.total_volume == freshest_preview.total_volume
+    assert state.prev_snapshot_total_volume == committed.total_volume
+    assert state.poc_history == [committed.poc_price]
+
 def test_live_redis_encoding_contains_complete_canonical_feature_contract():
     engine = VolumeProfileEngine()
     engine.update(TickStub(up=2, down=1))

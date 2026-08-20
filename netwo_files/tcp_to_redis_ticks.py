@@ -25,9 +25,10 @@ TradeStation -> TickBridge.dll -> TCP port 9010 -> this server -> Redis tick_dat
 
 Function Summary
 ----------------
-1) main()  -- binds TCP port 9010, accepts one client, reads kernel buffer in a loop,
-              splits on newline, pushes each raw CSV line as {"raw_tick": line}
-              to tick_data_raw via xadd. Zero parsing, zero validation.
+1) main()  -- binds TCP port 9010 and keeps accepting replacement clients.
+2) _handle_client() -- drains one client, splits on newline, and pushes each raw
+                       CSV line as {"raw_tick": line}. Zero parsing or validation.
+3) _accept_forever() -- survives graceful disconnects and connection resets.
 
 Run
 ---
@@ -47,45 +48,56 @@ from config.setting import (
 from netwo_files.redis_tool import get_redis_connection
 
 
-def main() -> None:
-    r = get_redis_connection(REDIS1_HOST, REDIS1_PORT, REDIS1_TICK_RAW_STREAM)
+def _handle_client(conn, redis_client) -> None:
+    """Drain one tick-DLL connection until it closes."""
+    buf = b""
+    with conn:
+        while True:
+            data = conn.recv(4096)
+            if not data:
+                return
+            buf += data
 
+            while b"\n" in buf:
+                raw_line, buf = buf.split(b"\n", 1)
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+
+                redis_client.xadd(
+                    REDIS1_TICK_RAW_STREAM,
+                    {"raw_tick": line},
+                    maxlen=50_000,
+                    approximate=True,
+                )
+                print(f"{datetime.now().isoformat()}  {line}")
+
+
+def _accept_forever(server, redis_client) -> None:
+    """Accept replacement DLL clients without terminating this process."""
+    while True:
+        conn, addr = server.accept()
+        print(f"[tick_server] Connection from {addr}")
+        try:
+            _handle_client(conn, redis_client)
+            print("[tick_server] Client disconnected")
+        except OSError as exc:
+            print(f"[tick_server] Client connection lost: {exc}")
+        print("[tick_server] Waiting for TradeStation to reconnect...")
+
+
+def main() -> None:
+    redis_client = get_redis_connection(
+        REDIS1_HOST, REDIS1_PORT, REDIS1_TICK_RAW_STREAM
+    )
     print(f"[tick_server] Listening TCP\n-Host:{TCP_TICK_HOST}\n-Port:{TCP_TICK_PORT}")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)  # 1MB kernel recv buffer
-        s.bind((TCP_TICK_HOST, TCP_TICK_PORT))
-        s.listen(5)
-
-        conn, addr = s.accept()
-        print(f"[tick_server] Connection from {addr}")
-
-        buf = b""
-        with conn:
-            while True:
-                data = conn.recv(4096)
-                if not data:
-                    print("[tick_server] Client disconnected")
-                    break
-
-                buf += data
-
-                while b"\n" in buf:
-                    raw_line, buf = buf.split(b"\n", 1)
-                    line = raw_line.decode("utf-8", errors="replace").strip()
-                    if not line:
-                        continue
-
-                    # Push raw line straight to Redis — no parsing, no validation
-                    r.xadd(
-                        REDIS1_TICK_RAW_STREAM,
-                        {"raw_tick": line},
-                        maxlen=50_000,
-                        approximate=True,
-                    )
-
-                    print(f"{datetime.now().isoformat()}  {line}")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+        server.bind((TCP_TICK_HOST, TCP_TICK_PORT))
+        server.listen(5)
+        _accept_forever(server, redis_client)
 
 
 if __name__ == "__main__":

@@ -107,6 +107,11 @@ python -m netwo_files.tick_validator        # cast + validate + push
 python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30
 ```
 
+The bar and tick TCP servers are persistent across TradeStation/chart
+disconnects. Each closes the old client, discards any incomplete trailing line,
+and returns to `accept()` so the hardened DLL can reconnect without relaunching
+the Python terminal.
+
 ### Step 4 — Feature Pipeline
 ```powershell
 python -m feat_files.transformer_features  # 13 features → features_transformer

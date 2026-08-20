@@ -34,7 +34,7 @@
 | [[easylanguage_bar_indicator]] | EasyLanguage indicator — calls `SendBar()` on every bar close |
 | `EL_files/dll.cpp` | C++ Win32 DLL source — opens TCP socket to `127.0.0.1:9009`, sends CSV |
 | `EL_files/BarBridge.dll` | Compiled DLL loaded by TradeStation |
-| `netwo_files/tcp_to_redis_connection.py` | Python TCP server — receives CSV, parses, validates, writes to `validated_bar` |
+| `netwo_files/tcp_to_redis_connection.py` | Persistent Python TCP server — accepts replacement DLL clients, receives CSV, parses, validates, writes to `validated_bar` |
 | `netwo_files/bar_contract.py` | `Bar` dataclass + `validate_bar()` + `validate_sequence()` |
 | `netwo_files/bar_codec.py` | Parse/encode — `parse_csv_line()`, `bar_from_redis_fields()`, `parse_xread_to_bars()` |
 
@@ -49,7 +49,7 @@ Separate high-frequency pipeline. Ingest and validation are split into two proce
 | [[easylanguage_tick_indicator]] | EasyLanguage indicator — calls `SendTick()` on every tick |
 | `EL_files/tick_dll.cpp` | C++ Win32 DLL source — opens TCP socket to `127.0.0.1:9010`, sends CSV |
 | `EL_files/TickBridge.dll` | Compiled DLL loaded by TradeStation |
-| `netwo_files/tcp_to_redis_ticks.py` | Ultra-lean TCP server port 9010 — drains kernel buffer, pushes raw CSV to `tick_data_raw`. Zero processing. |
+| `netwo_files/tcp_to_redis_ticks.py` | Persistent ultra-lean TCP server on 9010 — accepts replacement DLL clients, drains the kernel buffer, and pushes raw CSV to `tick_data_raw`. Zero processing. |
 | `netwo_files/tick_validator.py` | Separate process — reads `tick_data_raw`, casts, validates, pushes clean ticks to `tick_data_validated` |
 | `netwo_files/tick_contract.py` | `Tick` dataclass + `validate_tick()` (enforces `high == low`) + `validate_tick_sequence()` |
 | `netwo_files/tick_codec.py` | Parse/encode — `parse_raw_tick_line()`, `tick_from_redis_fields()`, `tick_to_redis_fields()`, `parse_xread_to_ticks()` |
@@ -103,6 +103,7 @@ Candidate and decision schemas are documented in [[strategy_candidate_integratio
 | File | Role |
 |---|---|
 | `tests/test_tcp_to_redis_connection.py` | Tests for bar parsing, casting, contract validation |
+| `tests/test_ingestion_reconnect.py` | Proves bar/tick servers accept replacement clients, survive resets, and never combine partial bytes across TCP sessions |
 
 ---
 

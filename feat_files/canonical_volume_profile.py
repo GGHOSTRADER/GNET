@@ -536,8 +536,12 @@ def update_profile(state: VolumeProfileState, tick: TickLike) -> None:
     state.last_price = snapped_price
 
 
-def snapshot_profile(state: VolumeProfileState) -> VolumeProfileResult:
-    """Create a canonical snapshot and advance previous-POC state."""
+def snapshot_profile(
+    state: VolumeProfileState,
+    *,
+    commit: bool = True,
+) -> VolumeProfileResult:
+    """Create a snapshot, optionally advancing interval-to-interval state."""
     price_levels = (
         state.min_price
         + np.arange(len(state.profile), dtype=np.float64) * state.tick_size
@@ -567,14 +571,15 @@ def snapshot_profile(state: VolumeProfileState) -> VolumeProfileResult:
         value_area_high=value_area_high,
         total_volume=total_volume,
     )
-    state.prev_poc_price = poc_price
-    state.prev_snapshot_total_volume = total_volume
-    state.prev_snapshot_cumulative_delta = float(delta_profile.sum())
-    state.prev_snapshot_price = state.last_price
-    state.prev_va_width = (value_area_high - value_area_low) / state.tick_size
-    state.poc_history.append(poc_price)
-    if len(state.poc_history) > POC_VELOCITY_SNAPSHOTS:
-        state.poc_history.pop(0)
+    if commit:
+        state.prev_poc_price = poc_price
+        state.prev_snapshot_total_volume = total_volume
+        state.prev_snapshot_cumulative_delta = float(delta_profile.sum())
+        state.prev_snapshot_price = state.last_price
+        state.prev_va_width = (value_area_high - value_area_low) / state.tick_size
+        state.poc_history.append(poc_price)
+        if len(state.poc_history) > POC_VELOCITY_SNAPSHOTS:
+            state.poc_history.pop(0)
     return VolumeProfileResult(
         symbol=state.symbol,
         date=state.date,
@@ -619,7 +624,7 @@ class VolumeProfileEngine:
             self.state = initialize_profile(tick, self.tick_size, self.range_ticks)
         update_profile(self.state, tick)
 
-    def snapshot(self) -> VolumeProfileResult:
-        """Return a snapshot after at least one tick has been processed."""
+    def snapshot(self, *, commit: bool = True) -> VolumeProfileResult:
+        """Return a snapshot, optionally without advancing interval history."""
         require_volume_profile(self.state is not None, "Cannot snapshot before the first tick.")
-        return snapshot_profile(self.state)
+        return snapshot_profile(self.state, commit=commit)
