@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What This Is
 
-GNET is a real-time end-to-end meta-labeling ML pipeline for ES futures. TradeStation streams bars and ticks into Redis, Python continuously engineers features, and an actual primary-strategy candidate triggers the mapped model. A correlated approve/reject decision is returned to the originating strategy window.
+GNET is a real-time end-to-end meta-labeling ML pipeline for ES futures. TradeStation streams bars and ticks into Redis, Python continuously engineers features, and an actual primary-strategy candidate triggers the mapped model. An approve/reject decision matched to the exact candidate is returned to the originating strategy window.
 
 ## Commands
 
@@ -17,9 +17,9 @@ pytest tests/test_volume_profile.py::test_find_poc_returns_highest_volume_level 
 
 ### Launch Full Pipeline (one command)
 ```powershell
-.\launch.ps1
+.\launch_grid.ps1
 ```
-Opens 9 numbered PowerShell terminals, Docker, Redis, TradeStation, and the local registry page.
+Opens one Windows Terminal window with 3 tabs/9 panes, Docker, Redis, TradeStation, and the local registry page. Use `launch.ps1` for the legacy nine-window layout.
 
 ### Run Individual Services
 ```powershell
@@ -100,7 +100,7 @@ TradeStation strategy → StrategyBridge.dll (9012) → candidates ─┤
 | `inference/candidate_tcp_server.py` | Validates candidates from shared TCP port 9012 and writes `trade_candidates` |
 | `inference/strategy_router.py` | Exact feature join, strategy-model selection, inference, `trade_decisions` output |
 | `inference/model_registry.py` | Validated discovery of `model_registry/*/registry.json` |
-| `inference/signal_tcp_server.py` | Serves correlated decisions over TCP port 9011 |
+| `inference/signal_tcp_server.py` | Serves exact-candidate decisions over TCP port 9011 |
 | `EL_files/dll.cpp` | C++ source for BarBridge.dll (bar sender) |
 | `EL_files/tick_dll.cpp` | C++ source for TickBridge.dll (tick sender) |
 | `EL_files/signal_dll.cpp` | C++ source for SignalBridge.dll (signal receiver) |

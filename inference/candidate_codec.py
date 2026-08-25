@@ -6,7 +6,7 @@ from inference.candidate_contract import CandidateError, TradeCandidate, validat
 
 
 def parse_candidate_line(line: str) -> TradeCandidate:
-    """Parse strategy, instance, candidate, symbol, and exact bar identity."""
+    """Parse strategy, instance, candidate, timestamp identity, and diagnostics."""
     parts = [part.strip() for part in line.split(",")]
     if len(parts) != 8:
         raise CandidateError(f"expected 8 fields, received {len(parts)}")

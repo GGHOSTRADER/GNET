@@ -2,7 +2,7 @@
 signal_tcp_server.py
 ====================
 
-Reads correlated decisions from the trade_decisions Redis stream and forwards them
+Reads exact-candidate decisions from the trade_decisions Redis stream and forwards them
 to TradeStation over a persistent TCP connection.
 
 Flow
@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import socket
 import time
+from datetime import datetime
 
 from config.setting import (
     REDIS1_HOST,
@@ -138,9 +139,11 @@ def _serve(conn: socket.socket, addr: tuple, redis_client) -> None:
             else f"{max(0, delivery_started_ns - int(published_ns)) / 1_000_000:.3f}"
         )
         print(
+            f"{datetime.now().isoformat(timespec='milliseconds')} "
             f"[signal_server] delivered strategy={fields.get('strategy_id', '')} "
             f"instance={fields.get('instance_id', '')} "
             f"candidate={fields.get('candidate_id', '')} "
+            f"date={fields.get('date', '')} time_s={fields.get('time_s', '')} "
             f"candidate_to_delivery_ms={candidate_to_delivery_ms} "
             f"redis_to_delivery_ms={redis_to_delivery_ms} "
             f"socket_send_ms={socket_send_ms:.3f}"

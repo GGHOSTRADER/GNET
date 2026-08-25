@@ -12,7 +12,7 @@
 | 5 | Feature pipelines read from Redis and compute | `transformer_features.py` / `volume_profile.py` | [[features_list]] |
 | 6 | A strategy sends a candidate only when its primary signal fires | `StrategyBridge.dll` / `candidate_tcp_server.py` | [[strategy_candidate_integration]] |
 | 7 | Router joins the exact feature bar, selects the model, and writes a decision | `inference/strategy_router.py` | [[features_list]] |
-| 8 | Decision TCP server returns the correlated result to the correct strategy window | `signal_tcp_server.py` / `SignalBridge.dll` | [[strategy_candidate_integration]] |
+| 8 | Decision TCP server returns the exact candidate's result to the correct strategy window | `signal_tcp_server.py` / `SignalBridge.dll` | [[strategy_candidate_integration]] |
 
 ---
 
@@ -89,7 +89,7 @@ and bar-number match; it never substitutes the latest feature record.
 | `inference/strategy_router.py` | Joins candidates to exact features, selects the configured model, writes `trade_decisions` |
 | `inference/model_registry.py` | Discovers and validates enabled models from `model_registry/*/registry.json` |
 | `gnet_ui/server.py` | Optional local registry page on `127.0.0.1:9020`; outside the inference path |
-| `inference/signal_tcp_server.py` | Reads `trade_decisions` and forwards correlated decisions on port 9011 |
+| `inference/signal_tcp_server.py` | Reads `trade_decisions` and forwards exact-candidate decisions on port 9011 |
 | `EL_files/signal_dll.cpp` | Queues decisions by strategy ID for non-blocking TradeStation polling |
 | `EL_files/SignalBridge.dll` | Compiled DLL loaded by TradeStation |
 | `training_mlp/strategies/MA2CrossLE/model/mlp_baseline/` | MA model, scaler, and configuration loaded once by the router |
@@ -169,7 +169,7 @@ python -m inference.candidate_tcp_server
 # Terminal 2 — exact feature join and model inference
 python -m inference.strategy_router
 
-# Terminal 3 — serves correlated decisions to TradeStation
+# Terminal 3 — serves exact-candidate decisions to TradeStation
 python -m inference.signal_tcp_server
 ```
 

@@ -3,6 +3,8 @@
 # Starts Docker and Redis, opens all 9 Python services in race-safe order,
 # then launches TradeStation only after every TCP listener is ready.
 
+param([switch]$Grid)
+
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DOCKER_DESKTOP = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 $TRADESTATION_SHORTCUT = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TradeStation\TradeStation.lnk"
@@ -10,6 +12,8 @@ $ROUTER_READY_KEY = "gnet:strategy_router:ready"
 $RUNTIME_DIR = Join-Path $ROOT ".runtime"
 $PROCESS_REGISTRY = Join-Path $RUNTIME_DIR "gnet_processes.json"
 $script:ManagedProcesses = @()
+$script:GridServiceIndex = 0
+$script:WindowsTerminal = $null
 
 function Save-ProcessRegistry {
     $script:ManagedProcesses | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $PROCESS_REGISTRY -Encoding UTF8
@@ -26,8 +30,39 @@ function Register-ManagedProcess {
 }
 
 function Open-Terminal {
-    param([string]$Title, [string]$Command)
+    param([string]$Title, [string]$Command, [string]$ServiceKey)
     $cmd = "cd '$ROOT'; `$host.UI.RawUI.WindowTitle = '$Title'; $Command"
+    if ($Grid) {
+        $serviceRunner = Join-Path $ROOT "automation\run_service_terminal.ps1"
+        $tabTitles = @("Strategy", "Tick Pipeline", "Bar and Operations")
+        $position = $script:GridServiceIndex % 3
+        $tabIndex = [math]::Floor($script:GridServiceIndex / 3)
+        if ($position -eq 0) {
+            $arguments = @(
+                "-w", "GNET", "new-tab",
+                "--title", $tabTitles[$tabIndex],
+                "-d", $ROOT,
+                "powershell.exe", "-NoProfile", "-NoExit", "-File", $serviceRunner,
+                "-ServiceKey", $ServiceKey
+            )
+        } else {
+            $paneSize = if ($position -eq 1) { "0.666" } else { "0.5" }
+            $arguments = @(
+                "-w", "GNET", "split-pane", "-V", "--size", $paneSize,
+                "--title", $Title,
+                "-d", $ROOT,
+                "powershell.exe", "-NoProfile", "-NoExit", "-File", $serviceRunner,
+                "-ServiceKey", $ServiceKey
+            )
+        }
+        & $script:WindowsTerminal @arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "Windows Terminal failed to open '$Title'."
+        }
+        $script:GridServiceIndex += 1
+        Start-Sleep -Milliseconds 350
+        return
+    }
     $process = Start-Process powershell -ArgumentList "-NoExit", "-Command", $cmd -PassThru
     Register-ManagedProcess -Process $process -Title $Title
 }
@@ -132,6 +167,12 @@ Wait-Redis
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw "Python was not found on PATH. Activate the GNET environment first."
 }
+if ($Grid) {
+    $script:WindowsTerminal = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
+    if (-not $script:WindowsTerminal) {
+        throw "Windows Terminal (wt.exe) is required for -Grid mode."
+    }
+}
 
 $occupiedPorts = @(9009, 9010, 9011, 9012) | Where-Object {
     Get-NetTCPConnection -State Listen -LocalPort $_ -ErrorAction SilentlyContinue
@@ -143,47 +184,60 @@ if ($occupiedPorts.Count -gt 0) {
 # ---------------------------------------------------------------------------
 # 3) Python service terminals (consumers before producers)
 # ---------------------------------------------------------------------------
-Write-Host "`n[3/4] Opening Python service terminals..." -ForegroundColor Yellow
+if ($Grid) {
+    Write-Host "`n[3/4] Opening one Windows Terminal grid..." -ForegroundColor Yellow
+} else {
+    Write-Host "`n[3/4] Opening Python service terminals..." -ForegroundColor Yellow
+}
 New-Item -ItemType Directory -Path $RUNTIME_DIR -Force | Out-Null
 $script:ManagedProcesses = @()
 Save-ProcessRegistry
 
 # Decision return path must listen before any candidate can be processed.
 Open-Terminal -Title "1 | Decision TCP     | port 9011" `
-              -Command "python -m inference.signal_tcp_server"
+              -Command "python -m inference.signal_tcp_server" `
+              -ServiceKey "decision"
 Wait-ListeningPort -Port 9011
 
 # Router must subscribe before feature or candidate producers begin.
 docker exec redis1 redis-cli del $ROUTER_READY_KEY | Out-Null
 Open-Terminal -Title "2 | Strategy Router" `
-              -Command "python -m inference.strategy_router"
+              -Command "python -m inference.strategy_router" `
+              -ServiceKey "router"
 Wait-Router
 
 Open-Terminal -Title "3 | Candidate TCP    | port 9012" `
-              -Command "python -m inference.candidate_tcp_server"
+              -Command "python -m inference.candidate_tcp_server" `
+              -ServiceKey "candidate"
 Wait-ListeningPort -Port 9012
 
-# Downstream tick consumers start before the tick TCP producer.
+# Tick services occupy one tab; consumers start before the TCP producer.
 Open-Terminal -Title "4 | Tick Validator" `
-              -Command "python -m netwo_files.tick_validator"
+              -Command "python -m netwo_files.tick_validator" `
+              -ServiceKey "validator"
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "5 | Volume Profile" `
-              -Command "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30"
+              -Command "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30" `
+              -ServiceKey "volume_profile"
 Start-Sleep -Seconds 1
 
-# Router is already subscribed before this feature producer starts.
+Open-Terminal -Title "8 | Tick TCP         | port 9010" `
+              -Command "python -m netwo_files.tcp_to_redis_ticks" `
+              -ServiceKey "tick_tcp"
+Wait-ListeningPort -Port 9010
+
+# Bar and transformer services occupy the final tab. The router is already
+# subscribed before the feature producer starts.
 Open-Terminal -Title "6 | Transformer Features" `
-              -Command "python -m feat_files.transformer_features"
+              -Command "python -m feat_files.transformer_features" `
+              -ServiceKey "transformer"
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "7 | Bar TCP          | port 9009" `
-              -Command "python -m netwo_files.tcp_to_redis_connection"
+              -Command "python -m netwo_files.tcp_to_redis_connection" `
+              -ServiceKey "bar_tcp"
 Wait-ListeningPort -Port 9009
-
-Open-Terminal -Title "8 | Tick TCP         | port 9010" `
-              -Command "python -m netwo_files.tcp_to_redis_ticks"
-Wait-ListeningPort -Port 9010
 
 $registryUrl = "http://127.0.0.1:9020/api/strategies"
 try {
@@ -193,7 +247,8 @@ try {
 }
 if ($existingRegistry.StatusCode -ne 200) {
     Open-Terminal -Title "9 | Registry UI      | port 9020" `
-                  -Command "python -m gnet_ui.server"
+                  -Command "python -m gnet_ui.server" `
+                  -ServiceKey "registry"
 } else {
     $registryListener = Get-NetTCPConnection -State Listen -LocalPort 9020 -ErrorAction SilentlyContinue |
         Select-Object -First 1
@@ -218,6 +273,10 @@ Write-Host "      TradeStation launched." -ForegroundColor Green
 Start-Process "http://127.0.0.1:9020"
 
 Write-Host "`n=== All services launched ===" -ForegroundColor Cyan
-Write-Host "   Up to 9 service terminals are open; an existing registry UI is reused." -ForegroundColor White
+if ($Grid) {
+    Write-Host "   One GNET Windows Terminal window contains 3 tabs with 3 panes each." -ForegroundColor White
+} else {
+    Write-Host "   Up to 9 service terminals are open; an existing registry UI is reused." -ForegroundColor White
+}
 Write-Host "   Model registry: http://127.0.0.1:9020" -ForegroundColor White
 Write-Host "   Apply EasyLanguage indicators in TradeStation once it finishes loading." -ForegroundColor White

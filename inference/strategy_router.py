@@ -1,8 +1,9 @@
-"""Join strategy candidates to exact bar features and run the selected model.
+"""Join strategy candidates to timestamped features and run the selected model.
 
 The router reads both Redis streams in one event loop. A candidate is never
-matched to "the latest" features: symbol, date, time_s and bar_num must all
-match. Features and candidates may arrive in either order.
+matched to "the latest" features: symbol, date, and time_s must all match.
+TradeStation ``CurrentBar`` is retained as diagnostics but is not a stable
+cross-study identifier. Features and candidates may arrive in either order.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import pickle
 import time
@@ -36,7 +38,7 @@ from inference.model_registry import enabled_model_settings
 from netwo_files.redis_tool import get_redis_connection
 
 
-BarKey = tuple[str, int, int, int]
+BarKey = tuple[str, int, int]
 Decision = dict[str, str]
 
 
@@ -45,8 +47,12 @@ def _feature_key(fields: dict[str, str]) -> BarKey:
         fields["symbol"],
         int(fields["date"]),
         int(fields["time_s"]),
-        int(fields["bar_num"]),
     )
+
+
+def _xread_has_entries(result: list) -> bool:
+    """Return whether a Redis XREAD/XREADGROUP wrapper contains any entries."""
+    return any(entries for _, entries in result)
 
 
 class StrategyModel:
@@ -297,9 +303,12 @@ def _publish(redis_client, decisions: list[Decision]) -> None:
             )
         redis_xadd_ms = (time.perf_counter_ns() - xadd_started_ns) / 1_000_000
         print(
+            f"{datetime.now().isoformat(timespec='milliseconds')} "
             f"[router] {decision['strategy_id']} "
             f"instance={decision['instance_id']} "
-            f"candidate={decision['candidate_id']} status={decision['status']} "
+            f"candidate={decision['candidate_id']} "
+            f"date={decision['date']} time_s={decision['time_s']} "
+            f"status={decision['status']} "
             f"approved={decision['approved']} "
             f"feature_wait_ms={decision['feature_wait_ms'] or 'n/a'} "
             f"inference_ms={decision['inference_ms'] or 'n/a'} "
@@ -375,7 +384,7 @@ def run(timeout_ms: int = 250) -> None:
                     decisions.extend(core.on_feature(fields))
                 except (KeyError, ValueError) as exc:
                     print(f"[router] rejected {stream} entry: {exc}")
-        if reading_pending and not candidate_results:
+        if reading_pending and not _xread_has_entries(candidate_results):
             reading_pending = False
         for stream, entries in candidate_results:
             for entry_id, fields in entries:

@@ -7,7 +7,7 @@ from inference.candidate_codec import (
 )
 from inference.candidate_contract import CandidateError
 from inference.signal_tcp_server import _decision_line, _serve
-from inference.strategy_router import RouterCore, _publish
+from inference.strategy_router import RouterCore, _publish, _xread_has_entries
 
 
 def _candidate(candidate_id="MA-101"):
@@ -23,6 +23,12 @@ def _features():
         "time_s": "36000",
         "bar_num": "101",
     }
+
+
+def test_xread_empty_stream_wrapper_contains_no_entries():
+    assert not _xread_has_entries([["trade_candidates", []]])
+    assert not _xread_has_entries([])
+    assert _xread_has_entries([["trade_candidates", [["1-0", {}]]]])
 
 
 def test_candidate_codec_round_trip():
@@ -57,11 +63,21 @@ def test_router_matches_when_candidate_arrives_first():
     assert decision["approved"] == "0"
 
 
-def test_router_rejects_nearby_but_nonmatching_bar_then_times_out():
+def test_router_ignores_cross_study_bar_number_difference():
+    core = RouterCore({"MA2CrossLE": lambda fields: (True, 0.9)}, timeout_s=0.25)
+    core.on_candidate(_candidate(), now=10.0)
+    same_market_bar = _features()
+    same_market_bar["bar_num"] = "102"
+    decision = core.on_feature(same_market_bar)[0]
+    assert decision["status"] == "ok"
+    assert decision["approved"] == "1"
+
+
+def test_router_rejects_nonmatching_timestamp_then_times_out():
     core = RouterCore({"MA2CrossLE": lambda fields: (True, 0.9)}, timeout_s=0.25)
     core.on_candidate(_candidate(), now=10.0)
     wrong = _features()
-    wrong["bar_num"] = "102"
+    wrong["time_s"] = "36030"
     assert core.on_feature(wrong) == []
     decision = core.expire(now=10.26)[0]
     assert decision["status"] == "missing_features"
@@ -84,7 +100,7 @@ def test_decision_wire_protocol_keeps_correlation_fields():
     )
 
 
-def test_same_strategy_instances_remain_correlated():
+def test_same_strategy_instances_receive_exact_candidate_decisions():
     core = RouterCore({"MA2CrossLE": lambda fields: (True, 0.8)})
     core.on_feature(_features())
     first = core.on_candidate(_candidate("first"))[0]
@@ -96,7 +112,7 @@ def test_same_strategy_instances_remain_correlated():
     assert second["instance_id"] == "MA-ES-02"
 
 
-def test_decision_contains_correlated_latency_fields():
+def test_decision_contains_exact_candidate_latency_fields():
     core = RouterCore({"MA2CrossLE": lambda fields: (True, 0.8)})
     core.on_feature(_features())
     decision = core.on_candidate(_candidate(), received_ns=1)[0]

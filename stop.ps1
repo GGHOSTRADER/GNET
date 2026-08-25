@@ -10,6 +10,10 @@ $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PROCESS_REGISTRY = Join-Path $ROOT ".runtime\gnet_processes.json"
 $GNET_PORTS = @(9009, 9010, 9011, 9012, 9020)
+$TRADESTATION_ROOTS = @(
+    "C:\Program Files (x86)\TradeStation 10.0\",
+    "C:\Program Files\TradeStation 10.0\"
+)
 
 Write-Host "=== Stopping GNET ===" -ForegroundColor Cyan
 
@@ -38,6 +42,27 @@ function Get-DescendantIds {
         $result += [int]$child.ProcessId
     }
     return $result
+}
+
+function Get-TradeStationProcesses {
+    $matches = @()
+    foreach ($process in Get-Process) {
+        $path = ""
+        $company = ""
+        try { $path = [string]$process.Path } catch { }
+        try { $company = [string]$process.Company } catch { }
+        $pathMatches = $false
+        foreach ($tradeStationRoot in $TRADESTATION_ROOTS) {
+            if ($path.StartsWith($tradeStationRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $pathMatches = $true
+                break
+            }
+        }
+        if ($pathMatches -or $company -match "^TradeStation Technologies") {
+            $matches += $process
+        }
+    }
+    return @($matches | Sort-Object ProcessName, Id)
 }
 
 $records = @()
@@ -111,6 +136,7 @@ $gnetModules = @(
 $escapedModules = $gnetModules | ForEach-Object { [regex]::Escape($_) }
 $gnetModulePattern = "-m\s+(" + ($escapedModules -join "|") + ")(\s|$)"
 $gnetMonitorPattern = "check_gnet_ports\.ps1.*\s-Watch(\s|$)"
+$gnetGridPanePattern = "run_service_terminal\.ps1.*-ServiceKey\s+(decision|router|candidate|validator|volume_profile|transformer|bar_tcp|tick_tcp|registry)(\s|$)"
 $legacyProcesses = @(
     $processSnapshot |
         Where-Object {
@@ -120,7 +146,10 @@ $legacyProcesses = @(
             $isPortMonitor =
                 $_.Name -in @("powershell.exe", "pwsh.exe") -and
                 $_.CommandLine -match $gnetMonitorPattern
-            $isGnetModule -or $isPortMonitor
+            $isGridPane =
+                $_.Name -in @("powershell.exe", "pwsh.exe") -and
+                $_.CommandLine -match $gnetGridPanePattern
+            $isGnetModule -or $isPortMonitor -or $isGridPane
         } |
         Sort-Object { if ($_.Name -in @("python.exe", "pythonw.exe")) { 0 } else { 1 } }
 )
@@ -149,31 +178,71 @@ if (Test-Path -LiteralPath $PROCESS_REGISTRY) {
 }
 
 if ($StopTradeStation) {
-    $tradeStationProcesses = @(Get-Process -Name "ORPlat" -ErrorAction SilentlyContinue)
-    foreach ($process in $tradeStationProcesses) {
+    $tradeStationProcesses = @(Get-TradeStationProcesses)
+    $mainWindows = @($tradeStationProcesses | Where-Object { $_.ProcessName -eq "ORPlat" })
+    foreach ($process in $mainWindows) {
         if ($process.CloseMainWindow()) {
             Write-Host "Requested a graceful TradeStation close (PID $($process.Id))." -ForegroundColor Green
         } else {
-            Write-Warning "TradeStation PID $($process.Id) has no closable main window; it was not forced closed."
+            Write-Warning "TradeStation PID $($process.Id) did not accept a graceful close request."
         }
+    }
+
+    if ($tradeStationProcesses.Count -gt 0) {
+        $deadline = (Get-Date).AddSeconds(10)
+        do {
+            Start-Sleep -Milliseconds 250
+            $remainingTradeStation = @(Get-TradeStationProcesses)
+        } while ($remainingTradeStation.Count -gt 0 -and (Get-Date) -lt $deadline)
+
+        if ($remainingTradeStation.Count -gt 0) {
+            Write-Warning "TradeStation did not fully close within 10 seconds; force-closing verified TradeStation processes."
+            foreach ($process in $remainingTradeStation) {
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                Write-Host "Stopped $($process.ProcessName) (PID $($process.Id))." -ForegroundColor Green
+            }
+            Start-Sleep -Seconds 1
+        }
+
+        $remainingTradeStation = @(Get-TradeStationProcesses)
+        if ($remainingTradeStation.Count -gt 0) {
+            $details = $remainingTradeStation | ForEach-Object { "$($_.ProcessName) PID $($_.Id)" }
+            throw "TradeStation processes remain: $($details -join ', ')"
+        }
+        Write-Host "TradeStation is fully stopped." -ForegroundColor Green
+    } else {
+        Write-Host "TradeStation was not running." -ForegroundColor Green
     }
 }
 
 if ($StopRedis -or $StopDockerDesktop) {
-    docker stop redis1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to stop Redis container redis1."
+    docker info *> $null
+    $dockerEngineAvailable = $LASTEXITCODE -eq 0
+    if ($dockerEngineAvailable) {
+        docker stop redis1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker is running but failed to stop Redis container redis1."
+        }
+        Write-Host "Stopped Redis container redis1; its stored data was not deleted." -ForegroundColor Green
+    } else {
+        Write-Host "Docker engine is already unavailable; Redis container redis1 is not running." -ForegroundColor Green
     }
-    Write-Host "Stopped Redis container redis1; its stored data was not deleted." -ForegroundColor Green
 }
 
 if ($StopDockerDesktop) {
     Write-Host "Stopping Docker Desktop and its engine..." -ForegroundColor Yellow
-    $dockerDesktopStopped = $false
-    docker desktop stop | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $dockerDesktopStopped = $true
+    $dockerProcesses = @(
+        Get-Process -Name "Docker Desktop", "com.docker.backend" -ErrorAction SilentlyContinue
+    )
+    $dockerDesktopStopped = -not $dockerEngineAvailable -and $dockerProcesses.Count -eq 0
+    if ($dockerDesktopStopped) {
+        Write-Host "Docker Desktop and its engine were already stopped." -ForegroundColor Green
     } else {
+        docker desktop stop 2>$null | Out-Null
+    }
+    if (-not $dockerDesktopStopped -and $LASTEXITCODE -eq 0) {
+        $dockerDesktopStopped = $true
+    } elseif (-not $dockerDesktopStopped) {
         $dockerCli = Join-Path $env:ProgramFiles "Docker\Docker\DockerCli.exe"
         if (Test-Path -LiteralPath $dockerCli) {
             & $dockerCli -Shutdown

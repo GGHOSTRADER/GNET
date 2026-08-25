@@ -1,4 +1,4 @@
-# Restart the complete GNET pipeline using the scoped stop and launch scripts.
+# Restart the complete GNET pipeline in the Windows Terminal grid.
 
 param(
     [switch]$StopTradeStation,
@@ -13,4 +13,4 @@ $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
     -StopRedis:$RestartRedis
 
 Set-Location -LiteralPath $ROOT
-& (Join-Path $ROOT "launch.ps1")
+& (Join-Path $ROOT "launch_grid.ps1")

@@ -26,8 +26,8 @@ class TradeCandidate:
     direction: int
 
     @property
-    def bar_key(self) -> tuple[str, int, int, int]:
-        return self.symbol, self.date, self.time_s, self.bar_num
+    def bar_key(self) -> tuple[str, int, int]:
+        return self.symbol, self.date, self.time_s
 
 
 def validate_candidate(candidate: TradeCandidate) -> TradeCandidate:

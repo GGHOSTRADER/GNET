@@ -28,6 +28,7 @@ python -m netwo_files.tick_validator
 """
 
 from datetime import datetime
+import time
 from typing import Optional
 
 from config.setting import (
@@ -40,7 +41,7 @@ from netwo_files.redis_tool import get_redis_connection
 from netwo_files.tick_codec import (
     parse_raw_tick_line,
     tick_to_redis_fields,
-    parse_xread_raw_ticks,
+    parse_xread_raw_tick_records,
     TickDecodeError,
 )
 from netwo_files.tick_contract import (
@@ -72,10 +73,11 @@ def main() -> None:
         if not xread_result:
             continue
 
-        entries = parse_xread_raw_ticks(xread_result)
+        entries = parse_xread_raw_tick_records(xread_result)
 
-        for entry_id, raw_line in entries:
+        for entry_id, raw_line, raw_fields in entries:
             last_id = entry_id
+            validator_received_ns = time.time_ns()
 
             if not raw_line:
                 print(f"[tick_validator] Empty raw_tick field — skipping entry {entry_id}")
@@ -98,9 +100,13 @@ def main() -> None:
             prev_tick = tick
 
             # 3) Push validated tick to clean stream
+            validated_fields = tick_to_redis_fields(tick)
+            if "tcp_received_ns" in raw_fields:
+                validated_fields["tcp_received_ns"] = raw_fields["tcp_received_ns"]
+            validated_fields["validator_received_ns"] = str(validator_received_ns)
             r.xadd(
                 REDIS1_TICK_VALIDATED_STREAM,
-                tick_to_redis_fields(tick),
+                validated_fields,
                 maxlen=50_000,
                 approximate=True,
             )

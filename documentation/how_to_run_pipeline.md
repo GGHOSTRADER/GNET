@@ -1,12 +1,13 @@
 # How to Run the Pipeline
 > **What:** Ordered steps to start the full data pipeline — Docker, Redis, Python servers, TradeStation, and feature/inference pipelines.
 
-The recommended path is the one-command launcher. It opens all nine Python
-services in the correct order; the manual commands below are for debugging.
+The recommended path is the one-command grid launcher. It opens all nine Python
+services in the correct order inside one Windows Terminal window; the manual
+commands below are for debugging.
 
 > [!WARNING]
 > **Start Python before enabling anything in TradeStation.** Wait until
-> `launch.ps1` prints `=== All services launched ===` and verify that TCP ports
+> `launch_grid.ps1` prints `=== All services launched ===` and verify that TCP ports
 > `9009`, `9010`, `9011`, and `9012` are all listening. If the bar indicator,
 > tick indicator, or strategy is enabled while its Python endpoint is down, the
 > DLLs repeatedly wait and reconnect. This can trap TradeStation in a waiting
@@ -18,20 +19,32 @@ services in the correct order; the manual commands below are for debugging.
 ## Step 1 — Run the Launch Script
 
 ```bash
-.\launch.ps1
+.\launch_grid.ps1
 ```
 
 Automatically starts Docker Desktop, waits for the engine, starts Redis,
-opens all nine Python service terminals, launches TradeStation, and opens the
-registry page at `http://127.0.0.1:9020`.
+opens one named Windows Terminal window with three tabs and three panes per tab,
+launches TradeStation, and opens the registry page at `http://127.0.0.1:9020`.
+
+The tabs are arranged as follows:
+
+| Tab | Pane 1 | Pane 2 | Pane 3 |
+|---|---|---|---|
+| Strategy | Decision TCP | Strategy Router | Candidate TCP |
+| Tick Pipeline | Tick Validator | Volume Profile | Tick TCP |
+| Bar and Operations | Transformer Features | Bar TCP | Registry UI |
+
+Each service retains its own pane; logs are not merged. The legacy
+`.\launch.ps1` command remains available when nine independent PowerShell
+windows are preferred.
 
 If this succeeds, skip directly to Step 6. Steps 2–5 show the equivalent
 manual service startup for debugging.
 
 ### Stop or restart all GNET services
 
-`launch.ps1` records the exact service-terminal PIDs it creates. Stop those
-GNET process trees, attempt to disable the watchdog, and verify ports 9009,
+The launcher starts exact, allowlisted Python modules. Stop those GNET process
+trees, attempt to disable the watchdog, and verify ports 9009,
 9010, 9011, 9012, and 9020 are released:
 
 ```powershell
@@ -61,7 +74,7 @@ Optional full-infrastructure restart, still without deleting Redis data:
 .\restart.ps1 -RestartRedis
 ```
 
-`-RestartRedis` stops only the `redis1` container before `launch.ps1` starts it
+`-RestartRedis` stops only the `redis1` container before `launch_grid.ps1` starts it
 again. Docker Desktop remains running and the container's persisted data is
 preserved. To stop GNET plus Redis without relaunching:
 
@@ -76,21 +89,29 @@ Desktop and its engine to release memory:
 .\stop.ps1 -StopDockerDesktop
 ```
 
-The next `launch.ps1` run starts Docker Desktop and the preserved `redis1`
+The next `launch_grid.ps1` run starts Docker Desktop and the preserved `redis1`
 container again.
 
-Request a graceful TradeStation close before relaunching it:
+Stop TradeStation before relaunching it:
 
 ```powershell
 .\restart.ps1 -StopTradeStation
 ```
 
-TradeStation is never force-killed: if it needs a save or confirmation, finish
-that interaction manually. `stop.ps1` never flushes or deletes Redis data.
+`-StopTradeStation` first requests a graceful close and waits up to ten seconds.
+If verified TradeStation processes remain, it force-closes only processes under
+the TradeStation installation roots or signed by TradeStation Technologies.
+Save workspace changes before using this option. `stop.ps1` never flushes or
+deletes Redis data.
 
-If TradeStation is frozen and cannot close gracefully, inspect the exact
-processes that would be targeted. Run these commands from the GNET repository
-root:
+Stop GNET, TradeStation, Redis, and Docker Desktop while preserving Redis data:
+
+```powershell
+.\stop.ps1 -StopTradeStation -StopDockerDesktop
+```
+
+To inspect the exact TradeStation processes that the standalone emergency
+command would target, run these commands from the GNET repository root:
 
 ```powershell
 cd C:\Users\g_med\python_new\GNET
@@ -111,7 +132,7 @@ does not stop GNET, Docker, Redis, or unrelated applications.
 For service terminals created before PID tracking was introduced, `stop.ps1`
 uses a narrow compatibility fallback: it stops only Python/PowerShell command
 lines matching the exact nine GNET module names. Unrelated Python processes are
-not targeted. After the next `launch.ps1`, normal shutdown uses the recorded
+not targeted. After the next `launch_grid.ps1`, normal shutdown uses the exact
 PID plus process start time to protect against PID reuse.
 
 If shutdown prints `Could not disable the watchdog: Access is denied`, the
@@ -149,9 +170,9 @@ This operation cannot be undone unless the Redis container data was separately
 backed up. After resetting Redis, the script gracefully shuts down Docker
 Desktop and its engine. That stops every running container, but only `redis1`
 is removed; unrelated containers and their stored data are not deleted. The
-next `launch.ps1` starts Docker Desktop again.
+next `launch_grid.ps1` starts Docker Desktop again.
 
-After removal without recreation, normal `launch.ps1` cannot start Redis until
+After removal without recreation, normal `launch_grid.ps1` cannot start Redis until
 the container is recreated:
 
 ```powershell
@@ -268,7 +289,7 @@ python -m inference.candidate_tcp_server
 # Terminal 2 — matches candidates to exact features and invokes the mapped model
 python -m inference.strategy_router
 
-# Terminal 3 — returns correlated decisions to TradeStation on port 9011
+# Terminal 3 — returns exact-candidate decisions to TradeStation on port 9011
 python -m inference.signal_tcp_server
 ```
 
@@ -372,7 +393,7 @@ order settings before enabling live orders.
 
 ## Step 8 — Start and Verify the Complete System
 
-**Do not enable any GNET TradeStation component yet.** Start `launch.ps1` first
+**Do not enable any GNET TradeStation component yet.** Start `launch_grid.ps1` first
 and wait until it prints `=== All services launched ===`. Confirm all four DLL
 endpoints before proceeding:
 
@@ -386,6 +407,21 @@ must show `READY` before TradeStation is enabled. Run the same command without
 one or more ports are missing. Seeing only one or some endpoints is not ready.
 Enabling the EasyLanguage components before all four endpoints are available
 can leave TradeStation stuck in the DLL connection/retry loop.
+
+To profile the live tick path in a separate terminal, run:
+
+```powershell
+cd C:\Users\g_med\python_new\GNET
+python -m netwo_files.tick_pipeline_profiler
+```
+
+The report refreshes every ten seconds and shows p50, p95, p99, and maximum
+latency for TCP line to raw Redis, raw Redis to validator start, validation to
+validated Redis, validated Redis to volume-profile Redis, and the complete
+TCP-to-volume-profile path. Use `--once` for one report or change the sample
+window with `--count 10000`. Restart the tick TCP server and validator once
+after installing this version so new records contain the transport timestamps;
+older stream records can still be joined but cannot report every hop.
 
 The bar and tick TCP servers remain bound after a DLL disconnect. They discard
 any incomplete line from the old connection, return to `accept()`, and wait for

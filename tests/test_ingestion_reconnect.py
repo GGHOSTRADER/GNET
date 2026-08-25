@@ -77,6 +77,6 @@ def test_tick_server_accepts_replacement_client_after_connection_reset():
     assert server.accept_count == 2
     assert first.closed and second.closed
     assert len(redis_client.added) == 1
-    assert redis_client.added[0][1] == {
-        "raw_tick": "@ES,1260819,36000,100.25,100.25,1,0,20"
-    }
+    published = redis_client.added[0][1]
+    assert published["raw_tick"] == "@ES,1260819,36000,100.25,100.25,1,0,20"
+    assert int(published["tcp_received_ns"]) > 0

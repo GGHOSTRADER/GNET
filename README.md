@@ -37,15 +37,17 @@ TradeStation strategies → StrategyBridge.dll (9012) → candidates ───�
 
 ### Step 1 — Infrastructure
 ```powershell
-.\launch.ps1
+.\launch_grid.ps1
 ```
 
-Starts Docker Desktop, Redis (`6381`), TradeStation, all nine Python services,
-and opens the local registry page.
+Starts Docker Desktop, Redis (`6381`), TradeStation, and all nine Python
+services inside one Windows Terminal window with three tabs and three panes per
+tab, then opens the local registry page. Use `.\launch.ps1` only when nine
+independent PowerShell windows are preferred.
 
 > [!WARNING]
 > Do not enable the GNET EasyLanguage indicators or strategy until
-> `launch.ps1` reports `=== All services launched ===` and ports `9009`, `9010`,
+> `launch_grid.ps1` reports `=== All services launched ===` and ports `9009`, `9010`,
 > `9011`, and `9012` are all listening. Otherwise the DLL connection/retry loop
 > can make TradeStation appear frozen.
 
@@ -205,12 +207,13 @@ Redis: `127.0.0.1:6381` (Docker)
 | `inference/candidate_tcp_server.py` | Validates candidates and publishes `trade_candidates` |
 | `inference/strategy_router.py` | Exact feature join, model selection, inference, decision publishing |
 | `inference/model_registry.py` | Discovers and validates directory-backed strategy models |
-| `inference/signal_tcp_server.py` | Serves correlated `trade_decisions` over TCP 9011 |
+| `inference/signal_tcp_server.py` | Serves exact-candidate `trade_decisions` over TCP 9011 |
 | `gnet_ui/server.py` | Local model-registry page on port 9020 |
 | `training_mlp/study_pipeline.py` | Builds labeled dataset from raw TradeStation exports |
 | `training_mlp/30_training_mlp.py` | Purged-embargo CV training |
 | `training_mlp/30_evaluate_mlp.py` | Held-out test evaluation |
-| `launch.ps1` | One-shot infra launcher |
+| `launch_grid.ps1` | Recommended one-window, three-tab pipeline launcher |
+| `launch.ps1` | Legacy nine-window pipeline launcher and grid implementation core |
 
 ---
 

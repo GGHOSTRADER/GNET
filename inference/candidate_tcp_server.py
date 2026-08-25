@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socketserver
 import time
+from datetime import datetime
 
 from config.setting import (
     REDIS1_CANDIDATE_STREAM,
@@ -38,9 +39,12 @@ class _CandidateHandler(socketserver.StreamRequestHandler):
                 approximate=True,
             )
             print(
+                f"{datetime.now().isoformat(timespec='milliseconds')} "
                 f"[candidate_server] {candidate.strategy_id} "
                 f"instance={candidate.instance_id} "
-                f"candidate={candidate.candidate_id} bar={candidate.bar_num}"
+                f"candidate={candidate.candidate_id} "
+                f"date={candidate.date} time_s={candidate.time_s} "
+                f"bar={candidate.bar_num}"
             )
 
 

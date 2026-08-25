@@ -74,7 +74,7 @@ cl /LD /EHsc dll.cpp ws2_32.lib /Fe:BarBridge.dll
 cl /LD /EHsc tick_dll.cpp ws2_32.lib /Fe:TickBridge.dll
 ```
 
-### SignalBridge.dll — receives correlated decisions from Python (port 9011)
+### SignalBridge.dll — receives exact-candidate decisions from Python (port 9011)
 ```bash
 cl /LD /EHsc signal_dll.cpp ws2_32.lib /Fe:SignalBridge.dll
 ```

@@ -1,5 +1,5 @@
 # EasyLanguage Signal Indicator
-> **What:** Pattern for each TradeStation strategy window to retrieve only its own correlated model decisions.
+> **What:** Pattern for each TradeStation strategy window to retrieve only decisions matched to its exact candidates.
 
 Receives signals from `inference/signal_tcp_server.py` through `SignalBridge.dll` (compiled from `signal_dll.cpp`).
 
@@ -59,6 +59,7 @@ plot2(approved, "approved", red);
 
 - Every strategy window uses a unique stable instance ID but shares one DLL connection
 - `signal_tcp_server.py` must be running before TradeStation polls for decisions
-- The router accepts only an exact symbol, date, time, and bar-number feature match
+- The router accepts only an exact symbol, date, and time feature match;
+  TradeStation bar number is diagnostic because it differs across studies
 - See [[how_to_compile_dll]] to compile `SignalBridge.dll`
 - See [[how_to_run_pipeline]] for the full startup order

@@ -98,7 +98,7 @@ extern "C" __declspec(dllexport) int __stdcall RecvDecision(const char* instance
         // WSAEWOULDBLOCK / WSAETIMEDOUT = no data ready, that's fine
     }
 
-    // Drain every complete correlated decision into its strategy queue.
+    // Drain every complete exact-candidate decision into its strategy queue.
     char* newline = nullptr;
     while ((newline = (char*)memchr(g_buf, '\n', g_buf_len)) != nullptr) {
         *newline = '\0';

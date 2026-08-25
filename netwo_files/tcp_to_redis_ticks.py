@@ -36,6 +36,7 @@ python -m netwo_files.tcp_to_redis_ticks
 """
 
 import socket
+import time
 from datetime import datetime
 
 from config.setting import (
@@ -60,13 +61,17 @@ def _handle_client(conn, redis_client) -> None:
 
             while b"\n" in buf:
                 raw_line, buf = buf.split(b"\n", 1)
+                tcp_received_ns = time.time_ns()
                 line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
 
                 redis_client.xadd(
                     REDIS1_TICK_RAW_STREAM,
-                    {"raw_tick": line},
+                    {
+                        "raw_tick": line,
+                        "tcp_received_ns": str(tcp_received_ns),
+                    },
                     maxlen=50_000,
                     approximate=True,
                 )

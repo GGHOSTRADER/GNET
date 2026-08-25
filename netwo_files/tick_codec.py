@@ -180,6 +180,28 @@ def parse_xread_raw_ticks(xread_result: Any) -> List[Tuple[str, str]]:
     return out
 
 
+def parse_xread_raw_tick_records(
+    xread_result: Any,
+) -> List[Tuple[str, str, Dict[str, str]]]:
+    """Extract raw lines plus transport metadata from a raw-stream XREAD."""
+    if xread_result is None:
+        return []
+
+    out: List[Tuple[str, str, Dict[str, str]]] = []
+    for stream_block in xread_result:
+        _stream_name, entries = stream_block
+        for entry_id, fields in entries:
+            decoded = {_as_str(k): _as_str(v) for k, v in fields.items()}
+            out.append(
+                (
+                    _as_str(entry_id),
+                    decoded.get("raw_tick", ""),
+                    decoded,
+                )
+            )
+    return out
+
+
 # ============================================================
 # Validated stream XREAD: fields -> XReadTickBatch
 # ============================================================
