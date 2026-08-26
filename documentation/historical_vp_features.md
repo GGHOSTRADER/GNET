@@ -90,7 +90,7 @@ candidates; they do not remove features automatically.
 ## Live-Parity Follow-up
 
 Offline temporal state now commits once per interval. The live adapter still
-calls a committing snapshot on every qualifying final-second tick. Before a
+previously called a committing snapshot on every qualifying final-second tick. The live adapter now commits once at the wall-clock `29.925` gate. Before a
 VP-dependent model is trained or deployed, update live publication to emit
 fresh previews throughout the final second but commit temporal history only
 once. The current MA model remains correctly isolated on its trained 13-feature

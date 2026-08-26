@@ -37,8 +37,8 @@ Output: `signal=1` (buy) when `sigmoid(logit) >= THRESHOLD` (default 0.5).
 
 Computed by `feat_files/canonical_volume_profile.py` from TradeStation-classified
 `Up` and `Down` tick volume. The live adapter can emit multiple records per
-interval because every qualifying final-second tick currently requests a
-snapshot. These fields are available in `features_volume_profile` but are not
+interval from the canonical state at the fixed `29.925` wall-clock gate. These
+fields are available in `features_volume_profile` but are not
 included in the MA model.
 
 | Feature             | Description                                                              |

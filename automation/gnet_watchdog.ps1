@@ -17,7 +17,7 @@ $Services = @(
     @{ Key = "router"; Name = "Strategy Router"; Module = "inference.strategy_router"; Command = "python -m inference.strategy_router" },
     @{ Key = "candidate"; Name = "Candidate TCP"; Module = "inference.candidate_tcp_server"; Command = "python -m inference.candidate_tcp_server" },
     @{ Key = "validator"; Name = "Tick Validator"; Module = "netwo_files.tick_validator"; Command = "python -m netwo_files.tick_validator" },
-    @{ Key = "volume_profile"; Name = "Volume Profile"; Module = "feat_files.volume_profile"; Command = "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30" },
+    @{ Key = "volume_profile"; Name = "Volume Profile"; Module = "feat_files.volume_profile"; Command = "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925" },
     @{ Key = "transformer"; Name = "Transformer Features"; Module = "feat_files.transformer_features"; Command = "python -m feat_files.transformer_features" },
     @{ Key = "bar_tcp"; Name = "Bar TCP"; Module = "netwo_files.tcp_to_redis_connection"; Command = "python -m netwo_files.tcp_to_redis_connection" },
     @{ Key = "tick_tcp"; Name = "Tick TCP"; Module = "netwo_files.tcp_to_redis_ticks"; Command = "python -m netwo_files.tcp_to_redis_ticks" },

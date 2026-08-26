@@ -106,7 +106,7 @@ python -m netwo_files.tcp_to_redis_connection
 ```powershell
 python -m netwo_files.tcp_to_redis_ticks   # drain kernel buffer
 python -m netwo_files.tick_validator        # cast + validate + push
-python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30
+python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925
 ```
 
 The bar and tick TCP servers are persistent across TradeStation/chart
@@ -203,7 +203,7 @@ Redis: `127.0.0.1:6381` (Docker)
 | `netwo_files/tcp_to_redis_ticks.py` | Tick TCP server — drain only, zero processing |
 | `netwo_files/tick_validator.py` | Tick cast + validate + sequence check |
 | `feat_files/transformer_features.py` | 13 features, 60-bar rolling window |
-| `feat_files/volume_profile.py` | Stateful POC/Value Area; currently may emit multiple final-second snapshots |
+| `feat_files/volume_profile.py` | Stateful POC/Value Area; updates every tick and publishes once per interval at wall-clock offset 29.925 |
 | `inference/candidate_tcp_server.py` | Validates candidates and publishes `trade_candidates` |
 | `inference/strategy_router.py` | Exact symbol/date/time feature join, model selection, inference, decision publishing; bar number remains diagnostic |
 | `inference/model_registry.py` | Discovers and validates directory-backed strategy models |

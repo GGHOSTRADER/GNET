@@ -303,7 +303,7 @@ def _publish(redis_client, decisions: list[Decision]) -> None:
             )
         redis_xadd_ms = (time.perf_counter_ns() - xadd_started_ns) / 1_000_000
         print(
-            f"{datetime.now().isoformat(timespec='milliseconds')} "
+            f"~ {datetime.now().isoformat(timespec='milliseconds')} "
             f"[router] {decision['strategy_id']} "
             f"instance={decision['instance_id']} "
             f"candidate={decision['candidate_id']} "
@@ -330,6 +330,9 @@ def run(timeout_ms: int = 250) -> None:
     )
     redis_client = get_redis_connection(
         REDIS1_HOST, REDIS1_PORT, REDIS1_CANDIDATE_STREAM
+    )
+    print(
+        "[router] Purpose: makes decision."
     )
     try:
         redis_client.xgroup_create(

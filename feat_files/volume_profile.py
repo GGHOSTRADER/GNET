@@ -8,7 +8,9 @@ function names for existing callers.
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Optional
+import math
+import time
+from typing import Any, Callable, Iterator, Optional
 
 from config.setting import (
     REDIS1_FEATURES_VP_STREAM,
@@ -37,10 +39,15 @@ from feat_files.canonical_volume_profile import (
     update_profile,
 )
 from netwo_files.redis_tool import get_redis_connection
-from netwo_files.tick_codec import XReadTickBatch, parse_xread_to_ticks
+from netwo_files.tick_codec import (
+    XReadTickBatch,
+    parse_xread_to_ticks,
+    tick_from_redis_fields,
+)
 
 
 DEFAULT_SNAPSHOT_INTERVAL_S = 30
+DEFAULT_SNAPSHOT_OFFSET_S = 29.925
 
 # Backward-compatible aliases. All resolve to the canonical implementation.
 _SessionState = VolumeProfileState
@@ -104,6 +111,78 @@ def stream_volume_profile(
             yield engine.snapshot()
 
 
+def next_snapshot_deadline(
+    now_s: float,
+    snapshot_interval_s: int = DEFAULT_SNAPSHOT_INTERVAL_S,
+    snapshot_offset_s: float = DEFAULT_SNAPSHOT_OFFSET_S,
+) -> float:
+    """Return the first configured wall-clock gate strictly after ``now_s``."""
+    if snapshot_interval_s <= 0:
+        raise VolumeProfileError("snapshot_interval_s must be positive")
+    if not 0 <= snapshot_offset_s < snapshot_interval_s:
+        raise VolumeProfileError(
+            "snapshot_offset_s must be within the snapshot interval"
+        )
+    interval_start = math.floor(now_s / snapshot_interval_s) * snapshot_interval_s
+    deadline = interval_start + snapshot_offset_s
+    if deadline <= now_s:
+        deadline += snapshot_interval_s
+    return deadline
+
+
+def _stream_entry_ms(entry_id: Any) -> float:
+    """Decode the millisecond wall-clock component of a Redis stream ID."""
+    return float(str(entry_id).split("-", 1)[0])
+
+
+def _publish_snapshot(
+    redis_connection: Any,
+    engine: VolumeProfileEngine,
+    source_entry_id: Optional[str] = None,
+    source_fields: Optional[dict[str, Any]] = None,
+) -> None:
+    """Commit and publish exactly one snapshot of the current canonical state."""
+    snapshot_started_ns = time.time_ns()
+    vp = engine.snapshot()
+    snapshot_finished_ns = time.time_ns()
+    fields = _vp_result_to_redis_fields(vp)
+    fields["snapshot_started_ns"] = str(snapshot_started_ns)
+    fields["snapshot_finished_ns"] = str(snapshot_finished_ns)
+    if source_entry_id is not None and source_fields is not None:
+        fields["source_validated_entry_id"] = source_entry_id
+        fields["source_validated_published_ms"] = str(
+            int(_stream_entry_ms(source_entry_id))
+        )
+        for source_name, target_name in (
+            ("raw_entry_id", "source_raw_entry_id"),
+            ("tcp_received_ns", "source_tcp_received_ns"),
+            ("validator_received_ns", "source_validator_received_ns"),
+            ("time", "source_tick_time_s"),
+        ):
+            value = source_fields.get(source_name)
+            if value is not None:
+                fields[target_name] = str(value)
+    redis_connection.xadd(
+        REDIS1_FEATURES_VP_STREAM,
+        fields,
+        maxlen=50_000,
+        approximate=True,
+    )
+    print(
+        f"{time.time():.3f} {vp.symbol} date={vp.date} bar={vp.bar_num} "
+        f"bars={vp.n_bars} tick={vp.tick_size} range={vp.range_ticks} "
+        f"POC={vp.poc_price:.2f} ({vp.poc_volume:.0f}) "
+        f"VA=[{vp.value_area_low:.2f} - {vp.value_area_high:.2f}] "
+        f"TotalVol={vp.total_volume:.0f} "
+        f"GridLevels={len(vp.price_levels)} Extensions={vp.extensions} | "
+        f"poc_dist={vp.poc_distance:.2f} poc_conc={vp.poc_concentration:.3f} "
+        f"va_width={vp.va_width:.2f} va_pos={vp.va_position:.2f} "
+        f"vol_above={vp.vol_above_poc_ratio:.3f} "
+        f"entropy={vp.profile_entropy:.3f} kurt={vp.profile_kurtosis:.2f} "
+        f"poc_mig={vp.poc_migration:.2f}"
+    )
+
+
 def _vp_result_to_redis_fields(vp: VolumeProfileResult) -> dict[str, str]:
     """Encode canonical scalar snapshot fields for Redis."""
     fields = {
@@ -131,37 +210,71 @@ def run_publish_loop(
     tick_size: float = 0.25,
     range_ticks: int = DEFAULT_RANGE_TICKS,
     snapshot_interval_s: int = DEFAULT_SNAPSHOT_INTERVAL_S,
+    snapshot_offset_s: float = DEFAULT_SNAPSHOT_OFFSET_S,
+    *,
+    block_ms: int = 250,
+    count: int = 200,
+    start_id: str = "$",
+    clock: Callable[[], float] = time.time,
 ) -> None:
-    """Publish canonical VP snapshots to the configured Redis stream."""
+    """Update on every tick and publish once at each wall-clock gate."""
+    if block_ms <= 0 or count <= 0:
+        raise VolumeProfileError("block_ms and count must be positive")
     redis_connection = get_redis_connection(
         REDIS1_HOST,
         REDIS1_PORT,
         REDIS1_FEATURES_VP_STREAM,
     )
-    for vp in stream_volume_profile(
-        tick_size=tick_size,
-        range_ticks=range_ticks,
-        snapshot_interval_s=snapshot_interval_s,
-    ):
-        redis_connection.xadd(
-            REDIS1_FEATURES_VP_STREAM,
-            _vp_result_to_redis_fields(vp),
-            maxlen=50_000,
-            approximate=True,
+    engine = VolumeProfileEngine(tick_size=tick_size, range_ticks=range_ticks)
+    last_id = start_id
+    latest_source_entry_id: Optional[str] = None
+    latest_source_fields: Optional[dict[str, Any]] = None
+    deadline = next_snapshot_deadline(
+        clock(), snapshot_interval_s, snapshot_offset_s
+    )
+
+    while True:
+        now_s = clock()
+        if now_s >= deadline:
+            if engine.state is not None:
+                _publish_snapshot(
+                    redis_connection,
+                    engine,
+                    latest_source_entry_id,
+                    latest_source_fields,
+                )
+            deadline = next_snapshot_deadline(
+                now_s, snapshot_interval_s, snapshot_offset_s
+            )
+            continue
+
+        until_gate_ms = max(1, math.ceil((deadline - now_s) * 1_000))
+        xread_result = redis_connection.xread(
+            {REDIS1_TICK_VALIDATED_STREAM: last_id},
+            count=count,
+            block=min(block_ms, until_gate_ms),
         )
-        print(
-            f"{vp.symbol} date={vp.date} bar={vp.bar_num} bars={vp.n_bars} "
-            f"tick={vp.tick_size} range={vp.range_ticks} "
-            f"POC={vp.poc_price:.2f} ({vp.poc_volume:.0f}) "
-            f"VA=[{vp.value_area_low:.2f} - {vp.value_area_high:.2f}] "
-            f"TotalVol={vp.total_volume:.0f} "
-            f"GridLevels={len(vp.price_levels)} Extensions={vp.extensions} | "
-            f"poc_dist={vp.poc_distance:.2f} poc_conc={vp.poc_concentration:.3f} "
-            f"va_width={vp.va_width:.2f} va_pos={vp.va_position:.2f} "
-            f"vol_above={vp.vol_above_poc_ratio:.3f} "
-            f"entropy={vp.profile_entropy:.3f} kurt={vp.profile_kurtosis:.2f} "
-            f"poc_mig={vp.poc_migration:.2f}"
-        )
+        if not xread_result:
+            continue
+
+        for raw_stream, entries in xread_result:
+            for entry_id, fields in entries:
+                entry_s = _stream_entry_ms(entry_id) / 1_000
+                if entry_s >= deadline:
+                    if engine.state is not None:
+                        _publish_snapshot(
+                            redis_connection,
+                            engine,
+                            latest_source_entry_id,
+                            latest_source_fields,
+                        )
+                    deadline = next_snapshot_deadline(
+                        entry_s, snapshot_interval_s, snapshot_offset_s
+                    )
+                engine.update(tick_from_redis_fields(fields))
+                last_id = str(entry_id)
+                latest_source_entry_id = last_id
+                latest_source_fields = dict(fields)
 
 
 def main(argv: Optional[list[str]] = None) -> None:
@@ -185,13 +298,20 @@ def main(argv: Optional[list[str]] = None) -> None:
         "--snapshot-interval-s",
         type=int,
         default=DEFAULT_SNAPSHOT_INTERVAL_S,
-        help="Bar length in seconds; snapshot fires 1s before close (default: 30)",
+        help="Wall-clock interval length in seconds (default: 30)",
+    )
+    parser.add_argument(
+        "--snapshot-offset-s",
+        type=float,
+        default=DEFAULT_SNAPSHOT_OFFSET_S,
+        help="Seconds into each interval to publish once (default: 29.925)",
     )
     args = parser.parse_args(argv)
     run_publish_loop(
         tick_size=args.tick_size,
         range_ticks=args.range_ticks,
         snapshot_interval_s=args.snapshot_interval_s,
+        snapshot_offset_s=args.snapshot_offset_s,
     )
 
 

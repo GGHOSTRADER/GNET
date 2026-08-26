@@ -21,17 +21,17 @@ Variables:
     SlowAvg(0),
     send_ok(0),
     recv_ok(0),
-    approved(0),
-    probability(0.0),
+    IntrabarPersist approved(0),
+    IntrabarPersist probability(0.0),
     direction(1),
     candidate_time_s(0),
-    last_candidate_bar(0),
-    pending_candidate_bar(0),
-    last_recv_state(0),
-    candidate_id(""),
-    decision_id(""),
-    decision_status(""),
-    pending_candidate(false),
+    IntrabarPersist last_candidate_bar(0),
+    IntrabarPersist pending_candidate_bar(0),
+    IntrabarPersist last_recv_state(0),
+    IntrabarPersist candidate_id(""),
+    IntrabarPersist decision_id(""),
+    IntrabarPersist decision_status(""),
+    IntrabarPersist pending_candidate(false),
     TimeSpan tod(null);
 
 External: "C:\Users\g_med\python_new\GNET\EL_files\StrategyBridge.dll",
@@ -68,7 +68,7 @@ SlowAvg = AverageFC(SlowPrice, SlowLength);
 { A lost decision must not block every later primary signal forever. }
 If pending_candidate and
    CurrentBar > pending_candidate_bar + CandidateTimeoutBars Then Begin
-    Print(Time, " GNET candidate timed out: candidate=", candidate_id);
+    Print(BarDateTime.ToString(), " GNET candidate timed out: candidate=", candidate_id);
     pending_candidate = false;
 End;
 
@@ -98,11 +98,11 @@ If LastBarOnChart and
         candidate_id = GetLastCandidateId(InstanceId);
         pending_candidate = true;
         pending_candidate_bar = CurrentBar;
-        Print(Time, " GNET candidate sent: instance=", InstanceId,
+        Print(BarDateTime.ToString(), " GNET candidate sent: instance=", InstanceId,
               " candidate=", candidate_id);
     End
     Else
-        Print(Time, " GNET candidate send failed: instance=", InstanceId);
+        Print(BarDateTime.ToString(), " GNET candidate send failed: instance=", InstanceId);
 End;
 
 { Poll only the live chart. IOG permits this between bar closes when the chart
@@ -120,25 +120,25 @@ If LastBarOnChart Then Begin
             pending_candidate = false;
 
             If decision_status = "ok" and approved = 1 Then Begin
-                Print(Time, " GNET approved: candidate=", decision_id,
+                Print(BarDateTime.ToString(), " GNET approved: candidate=", decision_id,
                       " probability=", probability:0:6);
                 Buy ("MA2CrossLE-GNET") next bar at market;
             End
             Else
-                Print(Time, " GNET rejected: candidate=", decision_id,
+                Print(BarDateTime.ToString(), " GNET rejected: candidate=", decision_id,
                       " status=", decision_status,
                       " probability=", probability:0:6);
         End
         Else
-            Print(Time, " GNET ignored unmatched decision: expected=", candidate_id,
+            Print(BarDateTime.ToString(), " GNET ignored unmatched decision: expected=", candidate_id,
                   " received=", decision_id);
     End;
 
     { Log connection loss and recovery once per state transition. }
     If recv_ok = -1 and last_recv_state <> -1 Then
-        Print(Time, " GNET decision connection unavailable for ", InstanceId)
+        Print(BarDateTime.ToString(), " GNET decision connection unavailable for ", InstanceId)
     Else If recv_ok >= 0 and last_recv_state = -1 Then
-        Print(Time, " GNET decision connection restored for ", InstanceId);
+        Print(BarDateTime.ToString(), " GNET decision connection restored for ", InstanceId);
 
     If recv_ok = -1 Then
         last_recv_state = -1

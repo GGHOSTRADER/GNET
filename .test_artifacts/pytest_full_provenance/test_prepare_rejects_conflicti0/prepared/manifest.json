@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-08-26T09:39:00.726470-04:00",
+  "symbol": "@ES",
+  "source_timezone": "America/New_York",
+  "session_start": "18:00:00",
+  "compression": "zstd",
+  "files": [
+    {
+      "source_file": "volumeprof1.txt",
+      "size_bytes": 96,
+      "rows": 1,
+      "zero_volume_rows": 0,
+      "first_timestamp": "2026-07-15 18:00:00",
+      "last_timestamp": "2026-07-15 18:00:00",
+      "sessions": 1
+    },
+    {
+      "source_file": "volumeprof2.txt",
+      "size_bytes": 96,
+      "rows": 1,
+      "zero_volume_rows": 0,
+      "first_timestamp": "2026-07-15 18:00:00",
+      "last_timestamp": "2026-07-15 18:00:00",
+      "sessions": 1
+    }
+  ],
+  "partitions": [
+    {
+      "session_date": "2026-07-16",
+      "owner": "volumeprof2.txt",
+      "owner_rows": 1,
+      "owner_sha256": "5ba376f520e0e1836cdbad2acc1a2da88b353442fa358893b53cd1bc17486bef",
+      "owner_parquet_bytes": 3617,
+      "reason": "conflicting_overlap_preferred_most_rows",
+      "overlap": true,
+      "identical_overlap": false,
+      "candidates": [
+        {
+          "source_file": "volumeprof1.txt",
+          "session_date": "2026-07-16",
+          "rows": 1,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-07-15 18:00:00",
+          "last_timestamp": "2026-07-15 18:00:00",
+          "sha256": "ded7a74fef865cec86b178177c85c142ba6150ca2ec93345c36296714e6c50e9",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\.test_artifacts\\pytest_full_provenance\\test_prepare_rejects_conflicti0\\prepared\\.staging\\volumeprof1\\session_date=2026-07-16\\ticks.parquet",
+          "parquet_bytes": 3617
+        },
+        {
+          "source_file": "volumeprof2.txt",
+          "session_date": "2026-07-16",
+          "rows": 1,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-07-15 18:00:00",
+          "last_timestamp": "2026-07-15 18:00:00",
+          "sha256": "5ba376f520e0e1836cdbad2acc1a2da88b353442fa358893b53cd1bc17486bef",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\.test_artifacts\\pytest_full_provenance\\test_prepare_rejects_conflicti0\\prepared\\.staging\\volumeprof2\\session_date=2026-07-16\\ticks.parquet",
+          "parquet_bytes": 3617
+        }
+      ]
+    }
+  ]
+}

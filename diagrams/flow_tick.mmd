@@ -72,7 +72,7 @@ flowchart TD
         DROP
     end
 
-    subgraph VOLUME_PROFILE ["Volume Profile - volume_profile.py - update every tick, snapshot every qualifying final-second tick"]
+    subgraph VOLUME_PROFILE ["Volume Profile - volume_profile.py - update every tick, publish once at wall-clock 29.925"]
         VP_READ
         VP_UPDATE
         VP_GATE

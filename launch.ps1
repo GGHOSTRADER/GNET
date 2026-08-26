@@ -226,7 +226,7 @@ Open-Terminal -Title "4 | Tick Validator" `
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "5 | Volume Profile" `
-              -Command "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30" `
+              -Command "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925" `
               -ServiceKey "volume_profile"
 Start-Sleep -Seconds 1
 

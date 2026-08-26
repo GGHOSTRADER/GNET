@@ -65,3 +65,25 @@ GetDecisionCandidateId(instance_id)
 Always compare the returned candidate ID with the candidate currently awaiting
 a response. A missing feature, unknown strategy, or inference failure returns a
 rejection with a non-`ok` status; it never silently approves a trade.
+
+Decision delivery uses an application-level acknowledgement. Sending bytes on
+port 9011 is not considered delivery: the Redis decision remains pending until
+`RecvDecision(instance_id)` removes the exact candidate from the DLL queue and
+the DLL returns `ACK,instance_id,candidate_id` to Python. If TradeStation or the
+socket disconnects first, Python leaves the decision pending and resends it
+after the DLL reconnects. This prevents a successful Windows socket write from
+silently consuming a decision that EasyLanguage never received.
+
+## Docker-backed Redis integration test
+
+Run the durable stream/reconnect coverage with Docker Desktop available:
+
+```powershell
+pytest -q tests/test_docker_redis_integration.py
+```
+
+The suite creates a uniquely named disposable Redis container on an automatic
+host port. It tests real consumer groups, candidate acknowledgement, aborted
+decision delivery, exact DLL acknowledgements, pending recovery, malformed
+entries, and offsets across client restart. It never connects to or modifies
+the live `redis1` container.

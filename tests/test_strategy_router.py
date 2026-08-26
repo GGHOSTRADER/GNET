@@ -1,12 +1,13 @@
 import pytest
 
+from inference import signal_tcp_server
 from inference.candidate_codec import (
     candidate_from_redis_fields,
     candidate_to_redis_fields,
     parse_candidate_line,
 )
 from inference.candidate_contract import CandidateError
-from inference.signal_tcp_server import _decision_line, _serve
+from inference.signal_tcp_server import _decision_line, _send_all, _serve
 from inference.strategy_router import RouterCore, _publish, _xread_has_entries
 
 
@@ -23,6 +24,15 @@ def _features():
         "time_s": "36000",
         "bar_num": "101",
     }
+
+
+class _AbortedSocket:
+    def send(self, _data):
+        raise ConnectionAbortedError(10053, "simulated client abort")
+
+
+def test_signal_send_treats_windows_client_abort_as_disconnect():
+    assert _send_all(_AbortedSocket(), b"decision\n") is False
 
 
 def test_xread_empty_stream_wrapper_contains_no_entries():
@@ -152,7 +162,7 @@ def test_publish_writes_decision_before_acknowledging_candidate():
     assert redis_client.calls[1][-1] == "123-0"
 
 
-def test_signal_server_acknowledges_only_after_socket_delivery():
+def test_signal_server_acknowledges_only_after_tradestation_ack(monkeypatch):
     class StopLoop(Exception):
         pass
 
@@ -183,6 +193,16 @@ def test_signal_server_acknowledges_only_after_socket_delivery():
     core.on_feature(_features())
     fields = core.on_candidate(_candidate())[0]
     events = []
+    ack_sent = False
+
+    def receive_ack(_conn):
+        nonlocal ack_sent
+        if "send" in events and not ack_sent:
+            ack_sent = True
+            return b"ACK,MA-ES-01,MA-101\n"
+        return None
+
+    monkeypatch.setattr(signal_tcp_server, "_recv_available", receive_ack)
 
     with pytest.raises(StopLoop):
         _serve(FakeConnection(events), ("local", 1), FakeRedis(fields, events))
@@ -190,7 +210,7 @@ def test_signal_server_acknowledges_only_after_socket_delivery():
     assert events == ["send", "ack"]
 
 
-def test_signal_server_handles_empty_pending_batch_before_new_decision():
+def test_signal_server_handles_empty_pending_batch_before_new_decision(monkeypatch):
     class StopLoop(Exception):
         pass
 
@@ -225,6 +245,16 @@ def test_signal_server_handles_empty_pending_batch_before_new_decision():
     fields = core.on_candidate(_candidate())[0]
     events = []
     redis_client = FakeRedis(fields, events)
+    ack_sent = False
+
+    def receive_ack(_conn):
+        nonlocal ack_sent
+        if "send" in events and not ack_sent:
+            ack_sent = True
+            return b"ACK,MA-ES-01,MA-101\n"
+        return None
+
+    monkeypatch.setattr(signal_tcp_server, "_recv_available", receive_ack)
 
     with pytest.raises(StopLoop):
         _serve(FakeConnection(events), ("local", 1), redis_client)

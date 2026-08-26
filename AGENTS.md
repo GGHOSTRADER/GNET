@@ -95,7 +95,7 @@ TradeStation strategy → StrategyBridge.dll (9012) → candidates ─┤
 | `netwo_files/tick_validator.py` | Cast + validate ticks, push to `tick_data_validated` |
 | `feat_files/transformer_features.py` | 13 features from 60-bar rolling window; `FeaturePoint` dataclass |
 | `feat_files/canonical_volume_profile.py` | Transport-independent total/Up/Down VP state, POC, Value Area, and 32 candidate features |
-| `feat_files/volume_profile.py` | Live Redis adapter and snapshot cadence; may emit multiple final-second snapshots |
+| `feat_files/volume_profile.py` | Live Redis adapter; updates every tick and commits once per interval at wall-clock offset 29.925 |
 | `feat_files/consolidator.py` | Debugging tool: merges transformer + volume profile streams |
 | `inference/candidate_tcp_server.py` | Validates candidates from shared TCP port 9012 and writes `trade_candidates` |
 | `inference/strategy_router.py` | Exact feature join, strategy-model selection, inference, `trade_decisions` output |

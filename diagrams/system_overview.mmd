@@ -38,7 +38,7 @@ flowchart TD
     CANONICAL_VP -.->|"VolumeProfileResult"| VP
 
     TF -->|"features_transformer"| REDIS
-    VP -->|"features_volume_profile - qualifying final-second ticks"| REDIS
+    VP -->|"features_volume_profile - one wall-clock snapshot at 29.925"| REDIS
 
     TS -->|"only when a primary strategy proposes a trade"| STRATEGY_DLL["StrategyBridge.dll - shared port 9012"]
     STRATEGY_DLL -->|"strategy + instance + GUID + timestamp identity + diagnostic bar number"| CANDIDATE_SERVER["candidate_tcp_server.py - validate and publish"]

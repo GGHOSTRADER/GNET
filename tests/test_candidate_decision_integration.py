@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 
 from config.setting import (
     REDIS1_CANDIDATE_STREAM,
@@ -45,7 +46,10 @@ class _MemoryRedis:
         self.signal_reads += 1
         if self.signal_reads == 1:
             return [[REDIS1_DECISION_STREAM, self.streams[REDIS1_DECISION_STREAM]]]
-        raise _StopSignalServer
+        if any(ack[0] == REDIS1_DECISION_STREAM for ack in self.acks):
+            raise _StopSignalServer
+        time.sleep(0.01)
+        return []
 
 
 def _run_signal_once(conn: socket.socket, redis_client: _MemoryRedis) -> None:
@@ -111,9 +115,10 @@ def test_real_tcp_candidate_round_trip_through_router_and_signal_server(monkeypa
     )
     signal_thread.start()
     payload = receiver.recv(4096).decode("utf-8").strip()
+    receiver.sendall(b"ACK,MA-ES-30S-01,guid-integration\n")
     receiver.close()
-    sender.close()
     signal_thread.join(timeout=2)
+    sender.close()
 
     assert payload == (
         "MA2CrossLE,MA-ES-30S-01,guid-integration,@ES,1260825,36000,101,1,"

@@ -39,7 +39,7 @@ class _CandidateHandler(socketserver.StreamRequestHandler):
                 approximate=True,
             )
             print(
-                f"{datetime.now().isoformat(timespec='milliseconds')} "
+                f"~ {datetime.now().isoformat(timespec='milliseconds')} "
                 f"[candidate_server] {candidate.strategy_id} "
                 f"instance={candidate.instance_id} "
                 f"candidate={candidate.candidate_id} "
@@ -55,8 +55,13 @@ class _ThreadingServer(socketserver.ThreadingTCPServer):
 
 def run() -> None:
     print(
-        f"[candidate_server] Listening on "
-        f"{TCP_CANDIDATE_HOST}:{TCP_CANDIDATE_PORT}"
+        "[candidate_server] Ready\n"
+        f"  TCP Host: {TCP_CANDIDATE_HOST}\n"
+        f"  TCP Port: {TCP_CANDIDATE_PORT}\n"
+        f"  Redis Host: {REDIS1_HOST}\n"
+        f"  Redis Port: {REDIS1_PORT}\n"
+        f"  Redis Stream: {REDIS1_CANDIDATE_STREAM}\n\n"
+        "[candidate_server] Purpose: receives candidate.\n"
     )
     with _ThreadingServer(
         (TCP_CANDIDATE_HOST, TCP_CANDIDATE_PORT), _CandidateHandler

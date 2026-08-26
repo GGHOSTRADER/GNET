@@ -1,0 +1,1 @@
+{"partitions": [{"session_date": "middle", "input_rows": 20}, {"session_date": "high", "input_rows": 30}, {"session_date": "low", "input_rows": 10}]}

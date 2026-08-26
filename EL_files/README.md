@@ -27,6 +27,11 @@ milliseconds, established sockets are non-blocking, and a busy DLL lock returns
 immediately to TradeStation. Run `build_hardened.cmd` to stage a coordinated x86
 build, then close TradeStation before installing the staged DLLs.
 
+`SignalBridge.dll` also sends an exact application acknowledgement only after
+`RecvDecision(instance_id)` hands a queued candidate to EasyLanguage. The Python
+signal server keeps that Redis decision pending until it receives the matching
+instance and candidate GUID, so a socket disconnect cannot silently lose it.
+
 The EasyLanguage backups send or poll only on `LastBarOnChart`, log connection
 loss/recovery only when state changes, and never replay historical chart bars
 through TCP. `G_MA_CROSS_NN` also releases a pending candidate after its

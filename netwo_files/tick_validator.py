@@ -101,6 +101,7 @@ def main() -> None:
 
             # 3) Push validated tick to clean stream
             validated_fields = tick_to_redis_fields(tick)
+            validated_fields["raw_entry_id"] = entry_id
             if "tcp_received_ns" in raw_fields:
                 validated_fields["tcp_received_ns"] = raw_fields["tcp_received_ns"]
             validated_fields["validator_received_ns"] = str(validator_received_ns)

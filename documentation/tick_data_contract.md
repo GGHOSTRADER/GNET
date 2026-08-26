@@ -83,6 +83,7 @@ domain object:
 | `tick_data_validated` | `validator_received_ns` | Local wall-clock time when validation began |
 
 Redis stream IDs provide raw, validated, and VP publication time. The passive
-`netwo_files.tick_pipeline_profiler` joins exact tick identities to report hop
-and total p50/p95/p99/max latency without changing canonical VP math.
-
+`netwo_files.tick_pipeline_profiler` follows explicitly propagated raw and
+validated Redis entry IDs into each VP snapshot. It reports hop and snapshot
+p50/p95/p99/max latency without guessing through reusable TradeStation
+`bar_num` values or changing canonical VP math.

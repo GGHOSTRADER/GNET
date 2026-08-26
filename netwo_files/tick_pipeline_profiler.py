@@ -16,10 +16,6 @@ from config.setting import (
     REDIS1_TICK_VALIDATED_STREAM,
 )
 from netwo_files.redis_tool import get_redis_connection
-from netwo_files.tick_codec import parse_raw_tick_line
-
-
-TickKey = tuple[str, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -29,6 +25,8 @@ class PipelineTimes:
     validator_received_ms: float | None = None
     validated_published_ms: float | None = None
     feature_published_ms: float | None = None
+    snapshot_started_ms: float | None = None
+    snapshot_finished_ms: float | None = None
 
 
 def _text(value: Any) -> str:
@@ -75,75 +73,74 @@ def _summary(label: str, values: Iterable[float]) -> str:
 
 
 def collect_pipeline_times(redis_client: Any, count: int) -> list[PipelineTimes]:
-    """Join recent raw, validated, and VP records by exact tick identity."""
-    raw_by_key: dict[TickKey, PipelineTimes] = {}
+    """Collect exact-hop samples using propagated Redis provenance IDs."""
+    raw_by_id: dict[str, PipelineTimes] = {}
     for entry_id, raw_fields in redis_client.xrevrange(
         REDIS1_TICK_RAW_STREAM, count=count
     ):
         fields = _fields(raw_fields)
-        try:
-            tick = parse_raw_tick_line(fields["raw_tick"])
-        except (KeyError, ValueError):
-            continue
         tcp_ns = fields.get("tcp_received_ns")
-        raw_by_key[_tick_key(tick.symbol, tick.date, tick.time_s, tick.bar_num)] = (
-            PipelineTimes(
-                tcp_received_ms=float(tcp_ns) / 1_000_000 if tcp_ns else None,
-                raw_published_ms=_stream_id_ms(entry_id),
-            )
+        raw_by_id[_text(entry_id)] = PipelineTimes(
+            tcp_received_ms=float(tcp_ns) / 1_000_000 if tcp_ns else None,
+            raw_published_ms=_stream_id_ms(entry_id),
         )
 
-    validated_by_key: dict[TickKey, PipelineTimes] = {}
+    samples: list[PipelineTimes] = []
     for entry_id, raw_fields in redis_client.xrevrange(
         REDIS1_TICK_VALIDATED_STREAM, count=count
     ):
         fields = _fields(raw_fields)
-        try:
-            key = _tick_key(
-                fields["symbol"],
-                int(fields["date"]),
-                int(fields["time"]),
-                int(fields["bar_num"]),
-            )
-        except (KeyError, ValueError):
+        raw_entry_id = fields.get("raw_entry_id")
+        if not raw_entry_id:
             continue
-        existing = raw_by_key.get(key, PipelineTimes())
+        existing = raw_by_id.get(raw_entry_id)
+        if existing is None:
+            continue
         validator_ns = fields.get("validator_received_ns")
-        validated_by_key[key] = PipelineTimes(
+        samples.append(PipelineTimes(
             tcp_received_ms=existing.tcp_received_ms,
             raw_published_ms=existing.raw_published_ms,
             validator_received_ms=(
                 float(validator_ns) / 1_000_000 if validator_ns else None
             ),
             validated_published_ms=_stream_id_ms(entry_id),
-        )
+        ))
 
-    feature_by_bar: dict[tuple[str, int, int], float] = {}
     for entry_id, raw_fields in redis_client.xrevrange(
         REDIS1_FEATURES_VP_STREAM, count=count
     ):
         fields = _fields(raw_fields)
         try:
-            key = fields["symbol"], int(fields["date"]), int(fields["bar_num"])
+            source_validated_ms = float(fields["source_validated_published_ms"])
         except (KeyError, ValueError):
             continue
-        feature_by_bar.setdefault(key, _stream_id_ms(entry_id))
-
-    joined: list[PipelineTimes] = []
-    for key, times in validated_by_key.items():
-        feature_ms = feature_by_bar.get((key[0], key[1], key[3]))
-        if feature_ms is None:
-            continue
-        joined.append(
+        tcp_ns = fields.get("source_tcp_received_ns")
+        validator_ns = fields.get("source_validator_received_ns")
+        started_ns = fields.get("snapshot_started_ns")
+        finished_ns = fields.get("snapshot_finished_ns")
+        raw_source = raw_by_id.get(fields.get("source_raw_entry_id", ""))
+        samples.append(
             PipelineTimes(
-                tcp_received_ms=times.tcp_received_ms,
-                raw_published_ms=times.raw_published_ms,
-                validator_received_ms=times.validator_received_ms,
-                validated_published_ms=times.validated_published_ms,
-                feature_published_ms=feature_ms,
+                tcp_received_ms=(
+                    float(tcp_ns) / 1_000_000 if tcp_ns else None
+                ),
+                raw_published_ms=(
+                    raw_source.raw_published_ms if raw_source else None
+                ),
+                validator_received_ms=(
+                    float(validator_ns) / 1_000_000 if validator_ns else None
+                ),
+                validated_published_ms=source_validated_ms,
+                feature_published_ms=_stream_id_ms(entry_id),
+                snapshot_started_ms=(
+                    float(started_ns) / 1_000_000 if started_ns else None
+                ),
+                snapshot_finished_ms=(
+                    float(finished_ns) / 1_000_000 if finished_ns else None
+                ),
             )
         )
-    return joined
+    return samples
 
 
 def format_report(samples: list[PipelineTimes]) -> str:
@@ -158,7 +155,7 @@ def format_report(samples: list[PipelineTimes]) -> str:
         return result
 
     lines = [
-        f"GNET tick pipeline latency — {len(samples)} exact VP-producing ticks",
+        "GNET tick pipeline latency — exact propagated Redis provenance",
         _summary(
             "TCP line -> raw Redis publish",
             durations("tcp_received_ms", "raw_published_ms"),
@@ -172,12 +169,20 @@ def format_report(samples: list[PipelineTimes]) -> str:
             durations("validator_received_ms", "validated_published_ms"),
         ),
         _summary(
-            "validated Redis -> VP Redis",
+            "latest tick age at VP publish",
             durations("validated_published_ms", "feature_published_ms"),
         ),
         _summary(
-            "TCP line -> VP Redis total",
+            "source TCP -> VP publish age",
             durations("tcp_received_ms", "feature_published_ms"),
+        ),
+        _summary(
+            "VP snapshot calculation",
+            durations("snapshot_started_ms", "snapshot_finished_ms"),
+        ),
+        _summary(
+            "VP snapshot start -> Redis",
+            durations("snapshot_started_ms", "feature_published_ms"),
         ),
     ]
     return "\n".join(lines)

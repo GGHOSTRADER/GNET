@@ -70,7 +70,7 @@ Separate high-frequency pipeline. Ingest and validation are split into two proce
 | File | Reads From | Features | Window |
 |---|---|---|---|
 | `feat_files/transformer_features.py` | `validated_bar` | `parkinson_vol`, `ofi`, `volume_percentile`, `volume_momentum`, `amihud`, `vwap_distance`, `session flags`, `day_of_week` | 60 bars |
-| `feat_files/volume_profile.py` | `tick_data_validated` | Canonical 32-feature VP contract: classified delta, Value Area dynamics, shape, acceptance, POC velocity, and HVN/LVN groups | Full 18:00 ES session; current live adapter may publish multiple final-second snapshots |
+| `feat_files/volume_profile.py` | `tick_data_validated` | Canonical 32-feature VP contract: classified delta, Value Area dynamics, shape, acceptance, POC velocity, and HVN/LVN groups | Full 18:00 ES session; one committed snapshot per interval at wall-clock offset 29.925 |
 
 See [[volume_profile_design]] for volume profile design and API. See [[features_list]] for full feature reference.
 
@@ -206,4 +206,4 @@ python -m inference.signal_tcp_server
 
 ## Open TODOs
 
-- **Volume-profile snapshot cadence:** decide whether `volume_profile.py` should keep publishing on every qualifying tick during the final second of each interval, deduplicate to the first qualifying tick, or publish the completed interval at the next boundary. Current behavior is intentionally unchanged and may produce multiple `features_volume_profile` entries for one 30-second interval.
+- **Volume-profile snapshot cadence:** the live adapter now publishes once at wall-clock offset `29.925` in every 30-second interval. Continue profiling live p99 latency and move the configurable gate earlier if the current 75 ms allowance proves insufficient.

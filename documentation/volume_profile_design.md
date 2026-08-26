@@ -58,7 +58,7 @@ Grid extension only happens if price breaks outside the pre-allocated range. Ext
 | `tick.down` | int | Market sell volume at this tick |
 | `tick.symbol` | str | Ticker symbol |
 | `tick.date` | int | Session date (YYYYMMDD) |
-| `tick.time_s` | int | Seconds since midnight — drives the snapshot gate (`time_s % snapshot_interval_s == snapshot_interval_s - 1`) |
+| `tick.time_s` | int | Seconds since midnight — retained as market-event identity; live snapshot cadence is wall-clock driven |
 | `tick.bar_num` | int | Tick sequence number |
 
 ### Launch Parameters
@@ -67,7 +67,8 @@ Grid extension only happens if price breaks outside the pre-allocated range. Ext
 |---|---|---|---|
 | `tick_size` | float | `0.25` | Price increment per level (e.g. 0.25 for ES futures) |
 | `range_ticks` | int | `400` | Ticks to pre-allocate at session start. 400 ticks @ 0.25 = ±50 points around open |
-| `snapshot_interval_s` | int | `30` | Interval length. Every tick satisfying `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1` fires a snapshot. Set to match the live bar size. |
+| `snapshot_interval_s` | int | `30` | Wall-clock interval length; set to match the live bar size |
+| `snapshot_offset_s` | float | `29.925` | Publish one committed snapshot this many seconds into each interval |
 
 **From CLI:**
 ```bash
@@ -83,7 +84,7 @@ stream_volume_profile(tick_size=0.25, range_ticks=600, snapshot_interval_s=30)
 
 ## Snapshot Cadence
 
-`_update()` runs on every tick — O(1), just `profile[index] += volume`. `_snapshot()` (POC, Value Area, and all derived features below) only runs when `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`.
+`_update()` runs on every tick — O(1), just `profile[index] += volume`. The live adapter runs `_snapshot()` once at wall-clock offset `29.925`. It publishes even when no tick arrives during that final second; post-gate ticks remain in canonical state for the following snapshot.
 
 **Why 1 second before bar close, not exactly at close:** the profile is session-cumulative, so missing the last second of ticks is statistically negligible — POC/VA/entropy etc. are dominated by the full session's accumulated volume. Snapshotting 1s early guarantees the row is already sitting in `features_volume_profile` before `features_transformer` fires for that bar, so `consolidator.py`'s `xrevrange(count=1)` reliably grabs the right one instead of racing.
 
@@ -231,9 +232,10 @@ Derives `price_levels` from `min_price + np.arange * tick_size`. Calls `_find_po
 ### Application
 
 **`stream_volume_profile(tick_size, range_ticks, snapshot_interval_s, block_ms, count, start_id)`**
-Main generator. Manages session lifecycle, calls `_init_session` on new day, and calls `_update` on every tick. It calls `_snapshot` whenever `tick.time_s % snapshot_interval_s == snapshot_interval_s - 1`; every tick in that second qualifies.
+Compatibility generator for deterministic tick-time replay and older callers.
 
-**`run_publish_loop(tick_size, range_ticks, snapshot_interval_s)`**
+**`run_publish_loop(tick_size, range_ticks, snapshot_interval_s, snapshot_offset_s)`**
+Production live loop. It uses Redis entry timestamps to separate pre-gate and post-gate ticks and publishes exactly once per wall-clock interval.
 Main loop. Pushes each `VolumeProfileResult` to `features_volume_profile` via `xadd` and prints one line per bar including grid size, extension count, and all derived features. Accepts CLI flags via `argparse` when run as `__main__`.
 
 ---

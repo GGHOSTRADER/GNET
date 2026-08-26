@@ -52,6 +52,8 @@ from feat_files.volume_profile import (
     _update,
     _snapshot,
     _session_key,
+    next_snapshot_deadline,
+    run_publish_loop,
     stream_volume_profile,
 )
 
@@ -317,3 +319,95 @@ def test_snapshot_gated_by_snapshot_interval(monkeypatch):
     # time_s = 0..60 -> fires at time_s = 29 and 59 -> 2 snapshots
     assert len(results) == 2
     assert [vp.n_bars for vp in results] == [30, 60]
+
+
+def test_wall_clock_deadline_is_29_925_each_interval():
+    assert next_snapshot_deadline(29.900) == pytest.approx(29.925)
+    assert next_snapshot_deadline(29.925) == pytest.approx(59.925)
+    assert next_snapshot_deadline(30.000) == pytest.approx(59.925)
+
+
+def test_live_publisher_fires_without_tick_at_gate(monkeypatch):
+    tick = make_stub(price=5000.0, bar_num=1, volume=10, time_s=29)
+    fields = {
+        "symbol": tick.symbol,
+        "date": str(tick.date),
+        "time": str(tick.time_s),
+        "high": repr(tick.high),
+        "low": repr(tick.low),
+        "up": str(tick.up),
+        "down": str(tick.down),
+        "bar_num": str(tick.bar_num),
+    }
+
+    class FakeRedis:
+        def __init__(self):
+            self.calls = 0
+
+        def xread(self, *_args, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return [["tick_data_validated", [["29900-0", fields]]]]
+            return []
+
+    times = iter([29.800, 29.800, 29.926])
+    published = []
+    monkeypatch.setattr(
+        "feat_files.volume_profile.get_redis_connection",
+        lambda *_args, **_kwargs: FakeRedis(),
+    )
+
+    def capture(_redis, engine, *_source):
+        published.append(engine.snapshot().total_volume)
+        raise StopIteration
+
+    monkeypatch.setattr("feat_files.volume_profile._publish_snapshot", capture)
+
+    with pytest.raises(StopIteration):
+        run_publish_loop(clock=lambda: next(times), block_ms=250)
+
+    assert published == [10.0]
+
+
+def test_post_gate_tick_is_not_in_committed_snapshot(monkeypatch):
+    before = make_stub(price=5000.0, bar_num=1, volume=10, time_s=29)
+    after = make_stub(price=5000.0, bar_num=2, volume=20, time_s=30)
+
+    def fields(tick):
+        return {
+            "symbol": tick.symbol,
+            "date": str(tick.date),
+            "time": str(tick.time_s),
+            "high": repr(tick.high),
+            "low": repr(tick.low),
+            "up": str(tick.up),
+            "down": str(tick.down),
+            "bar_num": str(tick.bar_num),
+        }
+
+    class FakeRedis:
+        def xread(self, *_args, **_kwargs):
+            return [[
+                "tick_data_validated",
+                [
+                    ["29900-0", fields(before)],
+                    ["29950-0", fields(after)],
+                ],
+            ]]
+
+    published = []
+    monkeypatch.setattr(
+        "feat_files.volume_profile.get_redis_connection",
+        lambda *_args, **_kwargs: FakeRedis(),
+    )
+
+    def capture(_redis, engine, *_source):
+        published.append(engine.snapshot().total_volume)
+        raise StopIteration
+
+    monkeypatch.setattr("feat_files.volume_profile._publish_snapshot", capture)
+
+    with pytest.raises(StopIteration):
+        run_publish_loop(clock=lambda: 29.800, block_ms=250)
+
+    assert published == [10.0]

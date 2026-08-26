@@ -275,12 +275,12 @@ python -m netwo_files.tcp_to_redis_ticks
 # Terminal 2 — validate ticks and push to tick_data_validated
 python -m netwo_files.tick_validator
 
-# Terminal 3 — volume profile reads validated ticks and snapshots on qualifying final-second ticks
-python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30
+# Terminal 3 — volume profile updates every tick and publishes once at 29.925
+python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925
 ```
 
 > The order matters: tcp_to_redis_ticks must run before tick_validator, and tick_validator before volume_profile.
-> `--snapshot-interval-s` should match the live bar length in seconds (default 30) — the profile updates on every tick (O(1)) but only emits POC/VA/derived features 1 second before each bar close.
+> `--snapshot-interval-s` must match the live bar length. The independent wall-clock gate publishes exactly once at `--snapshot-offset-s 29.925`, even if no tick arrives in that final second. Every tick still updates canonical state; post-gate ticks remain accumulated for the following snapshot.
 
 ---
 
@@ -453,12 +453,15 @@ python -m netwo_files.tick_pipeline_profiler
 ```
 
 The report refreshes every ten seconds and shows p50, p95, p99, and maximum
-latency for TCP line to raw Redis, raw Redis to validator start, validation to
-validated Redis, validated Redis to volume-profile Redis, and the complete
-TCP-to-volume-profile path. Use `--once` for one report or change the sample
-window with `--count 10000`. Restart the tick TCP server and validator once
-after installing this version so new records contain the transport timestamps;
-older stream records can still be joined but cannot report every hop.
+latency for ingestion/validation, VP snapshot calculation, and snapshot-to-Redis
+publication. It separately labels the age of the latest source tick at the
+scheduled VP publication; that age includes intentional waiting for the
+`29.925` gate and is not CPU processing latency. Use `--once` for one report or
+change the sample window with `--count 10000`. Restart the tick validator and
+volume-profile service once after installing this version so records contain
+the exact propagated raw/validated Redis IDs and snapshot timestamps. Older VP
+records without provenance are ignored rather than joined through reusable
+TradeStation bar numbers.
 
 The bar and tick TCP servers remain bound after a DLL disconnect. They discard
 any incomplete line from the old connection, return to `accept()`, and wait for
@@ -533,6 +536,8 @@ field contracts.
 | `trade_decisions` | `strategy_router.py` | `signal_tcp_server.py` |
 
 The router acknowledges a candidate consumer-group entry only after its
-decision is published. The signal server acknowledges a decision only after
-the line is delivered over TCP. A watchdog restart therefore resumes pending
-messages instead of starting from the newest Redis entry.
+decision is published. The signal server does not acknowledge a Redis decision
+merely because Windows accepted the TCP bytes. `SignalBridge.dll` sends an
+exact `ACK,instance_id,candidate_id` only after `RecvDecision()` hands that
+decision to EasyLanguage; only then does Python acknowledge Redis. A disconnect
+before that confirmation leaves the decision pending for resend after reconnect.

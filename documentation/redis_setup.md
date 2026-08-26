@@ -68,7 +68,7 @@ All active streams live on Redis 1 (`127.0.0.1:6381`).
 - Tick streams (`tick_data_raw`, `tick_data_validated`) → **50,000** entries: high-frequency, need a large buffer.
 - Bar streams (`validated_bar`, `features_transformer`) → **1,000** entries: 1 per bar close, low-frequency, small buffer is enough.
 - Candidate and decision streams → **5,000** entries: event-driven and shared by all strategies.
-- `features_volume_profile` is gate-limited but can contain multiple snapshots per interval because every tick timestamped in the final second qualifies. It keeps a **50,000** maxlen.
+- `features_volume_profile` receives exactly one committed snapshot per interval from the wall-clock `29.925` gate. It keeps a **50,000** maxlen.
 - All `xadd` calls use `approximate=True` so Redis trims lazily without blocking the write path.
 
 ---

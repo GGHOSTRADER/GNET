@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-08-26T09:38:59.894562-04:00",
+  "symbol": "@ES",
+  "source_timezone": "America/New_York",
+  "session_start": "18:00:00",
+  "compression": "zstd",
+  "files": [
+    {
+      "source_file": "volumeprof1.txt",
+      "size_bytes": 153,
+      "rows": 2,
+      "zero_volume_rows": 0,
+      "first_timestamp": "2026-07-15 18:00:00",
+      "last_timestamp": "2026-07-16 10:00:00",
+      "sessions": 1
+    },
+    {
+      "source_file": "volumeprof2.txt",
+      "size_bytes": 210,
+      "rows": 3,
+      "zero_volume_rows": 0,
+      "first_timestamp": "2026-07-15 18:00:00",
+      "last_timestamp": "2026-07-16 18:00:00",
+      "sessions": 2
+    }
+  ],
+  "partitions": [
+    {
+      "session_date": "2026-07-16",
+      "owner": "volumeprof1.txt",
+      "owner_rows": 2,
+      "owner_sha256": "3159b86c55639f53020197f3bdf29575bd9804516ed2ec3661d743a19971213a",
+      "owner_parquet_bytes": 6128,
+      "reason": "identical_overlap",
+      "overlap": true,
+      "identical_overlap": true,
+      "candidates": [
+        {
+          "source_file": "volumeprof1.txt",
+          "session_date": "2026-07-16",
+          "rows": 2,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-07-15 18:00:00",
+          "last_timestamp": "2026-07-16 10:00:00",
+          "sha256": "3159b86c55639f53020197f3bdf29575bd9804516ed2ec3661d743a19971213a",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\.test_artifacts\\pytest_full_provenance\\test_prepare_keeps_one_copy_of0\\prepared\\.staging\\volumeprof1\\session_date=2026-07-16\\ticks.parquet",
+          "parquet_bytes": 6128
+        },
+        {
+          "source_file": "volumeprof2.txt",
+          "session_date": "2026-07-16",
+          "rows": 2,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-07-15 18:00:00",
+          "last_timestamp": "2026-07-16 10:00:00",
+          "sha256": "3159b86c55639f53020197f3bdf29575bd9804516ed2ec3661d743a19971213a",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\.test_artifacts\\pytest_full_provenance\\test_prepare_keeps_one_copy_of0\\prepared\\.staging\\volumeprof2\\session_date=2026-07-16\\ticks.parquet",
+          "parquet_bytes": 6128
+        }
+      ]
+    },
+    {
+      "session_date": "2026-07-17",
+      "owner": "volumeprof2.txt",
+      "owner_rows": 1,
+      "owner_sha256": "4d5cd35bb1ee7ff566cce3ce9dab6461b979444d4fd82bf99efb51d636489fa1",
+      "owner_parquet_bytes": 3617,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof2.txt",
+          "session_date": "2026-07-17",
+          "rows": 1,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-07-16 18:00:00",
+          "last_timestamp": "2026-07-16 18:00:00",
+          "sha256": "4d5cd35bb1ee7ff566cce3ce9dab6461b979444d4fd82bf99efb51d636489fa1",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\.test_artifacts\\pytest_full_provenance\\test_prepare_keeps_one_copy_of0\\prepared\\.staging\\volumeprof2\\session_date=2026-07-17\\ticks.parquet",
+          "parquet_bytes": 3617
+        }
+      ]
+    }
+  ]
+}

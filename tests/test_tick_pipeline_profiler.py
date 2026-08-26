@@ -29,6 +29,7 @@ def test_collect_pipeline_times_joins_exact_tick_across_all_streams():
                         b"date": b"1260825",
                         b"time": b"35999",
                         b"bar_num": b"42",
+                        b"raw_entry_id": b"1001-0",
                         b"validator_received_ns": b"1002000000",
                     },
                 )
@@ -36,7 +37,14 @@ def test_collect_pipeline_times_joins_exact_tick_across_all_streams():
             "features_volume_profile": [
                 (
                     b"1009-0",
-                    {b"symbol": b"@ES", b"date": b"1260825", b"bar_num": b"42"},
+                    {
+                        b"source_raw_entry_id": b"1001-0",
+                        b"source_tcp_received_ns": b"1000000000",
+                        b"source_validator_received_ns": b"1002000000",
+                        b"source_validated_published_ms": b"1004",
+                        b"snapshot_started_ns": b"1007000000",
+                        b"snapshot_finished_ns": b"1007500000",
+                    },
                 )
             ],
         }
@@ -44,12 +52,14 @@ def test_collect_pipeline_times_joins_exact_tick_across_all_streams():
 
     samples = collect_pipeline_times(redis_client, count=100)
 
-    assert len(samples) == 1
+    assert len(samples) == 2
     assert samples[0].tcp_received_ms == 1000.0
     assert samples[0].raw_published_ms == 1001.0
     assert samples[0].validator_received_ms == 1002.0
     assert samples[0].validated_published_ms == 1004.0
-    assert samples[0].feature_published_ms == 1009.0
+    assert samples[1].feature_published_ms == 1009.0
+    assert samples[1].snapshot_started_ms == 1007.0
+    assert samples[1].snapshot_finished_ms == 1007.5
 
 
 def test_format_report_shows_each_pipeline_hop():
@@ -72,12 +82,23 @@ def test_format_report_shows_each_pipeline_hop():
                         "date": "1260825",
                         "time": "35999",
                         "bar_num": "42",
+                        "raw_entry_id": "1001-0",
                         "validator_received_ns": "1002000000",
                     },
                 )
             ],
             "features_volume_profile": [
-                ("1009-0", {"symbol": "@ES", "date": "1260825", "bar_num": "42"})
+                (
+                    "1009-0",
+                    {
+                        "source_raw_entry_id": "1001-0",
+                        "source_tcp_received_ns": "1000000000",
+                        "source_validator_received_ns": "1002000000",
+                        "source_validated_published_ms": "1004",
+                        "snapshot_started_ns": "1007000000",
+                        "snapshot_finished_ns": "1007500000",
+                    },
+                )
             ],
         }
     )
@@ -87,6 +108,8 @@ def test_format_report_shows_each_pipeline_hop():
     assert "TCP line -> raw Redis publish" in report
     assert "raw Redis -> validator starts" in report
     assert "validator start -> validated Redis" in report
-    assert "validated Redis -> VP Redis" in report
-    assert "TCP line -> VP Redis total" in report
+    assert "latest tick age at VP publish" in report
+    assert "source TCP -> VP publish age" in report
+    assert "VP snapshot calculation" in report
+    assert "VP snapshot start -> Redis" in report
     assert "p99=" in report

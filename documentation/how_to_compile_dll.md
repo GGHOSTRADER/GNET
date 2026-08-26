@@ -129,6 +129,9 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
   unavailable; they do not create an unbounded queue inside TradeStation.
 - `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
 - `SignalBridge` queues decisions by strategy-instance ID and uses non-blocking recv — each window can retrieve only its own decision
+- `SignalBridge` acknowledges the exact instance and candidate GUID back to
+  Python only when `RecvDecision()` hands it to EasyLanguage; install the
+  rebuilt DLL and restart Terminal 1 together when this protocol changes
 - See [[how_to_run_pipeline]] for the correct start order
 
 ### Troubleshooting: "Cannot find DLL library file"

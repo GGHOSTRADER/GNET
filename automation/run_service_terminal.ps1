@@ -42,7 +42,8 @@ $services = @{
             "-m", "feat_files.volume_profile",
             "--tick-size", "0.25",
             "--range-ticks", "600",
-            "--snapshot-interval-s", "30"
+            "--snapshot-interval-s", "30",
+            "--snapshot-offset-s", "29.925"
         )
     }
     transformer = @{

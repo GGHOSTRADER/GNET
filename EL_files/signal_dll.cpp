@@ -131,6 +131,24 @@ extern "C" __declspec(dllexport) int __stdcall RecvDecision(const char* instance
     }
     g_last[instance_id] = queue.front();
     queue.pop_front();
+
+    // Confirm application-level consumption only when RecvDecision hands the
+    // exact queued GUID to its EasyLanguage strategy instance. Python keeps
+    // the Redis entry pending until this ACK arrives, so a stale TCP socket or
+    // reconnect cannot silently lose an approved/rejected decision.
+    char ack[256];
+    int ack_length = std::snprintf(
+        ack,
+        sizeof(ack),
+        "ACK,%s,%s\n",
+        instance_id,
+        g_last[instance_id].candidate_id.c_str()
+    );
+    if (ack_length > 0 && ack_length < static_cast<int>(sizeof(ack))) {
+        // If this fails, Python deliberately leaves the decision pending and
+        // resends it after the DLL reconnects. EL still receives this copy.
+        g_client.send_all(ack, ack_length);
+    }
     ReleaseSRWLockExclusive(&g_lock);
     return 1;
 }
