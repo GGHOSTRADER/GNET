@@ -6,19 +6,16 @@ Sends bar data from TradeStation to the Python TCP server through `BarBridge.dll
 ## EasyLanguage Code
 
 ```pascal
-{ Sending Data from TS to Python server through .dll created in C++ }
+{ GNET live 30-second bar sender through BarBridge.dll }
 
-using elsystem; // Needing for TIMESPAN class
-
-// Lets the User modify the path of the .dll inside TS
-Inputs:
-    DllPath("C:\Users\g_med\py_scripts\ts_infra\BarBridge.dll");
+using elsystem;
 
 Vars:
     yyyymmdd(0), // Date
     bar_num (0),
     ok(0),
-    TimeSpan hhmmss (null); // Used for time in seconds of the day, must be timespam class
+    last_connection_state(-1),
+    TimeSpan hhmmss(null);
 
 { EasyLanguage DLL declaration }
 //          1                                                2        3
@@ -36,16 +33,20 @@ External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBar
     double,     { vwap }
     int;        { bar num }
 
-{ Only send on bar close so we don't spam per tick update }
-If BarStatus(1) = 2 Then Begin
-    // Date comes in TS propietary format, in YYMMDD but YY is years since 1900
+{ Send only the completed live bar; never replay historical chart bars. }
+If LastBarOnChart and BarStatus(1) = 2 Then Begin
     yyyymmdd = Date;
-    // Time is HHMM (or HHMMSS depending on settings); safest to use Time_s for seconds if available
     hhmmss = bardatetime.timeofday;
-    // Bar number
     bar_num = Currentbar;
-    // Send information through DLL
     ok = SendBar(Symbol, yyyymmdd, Intportion(hhmmss.TotalSeconds), Open, High, Low, Close, Upticks, Downticks, Vwap, bar_num);
+
+    If ok <> last_connection_state Then Begin
+        If ok = 1 Then
+            Print(Time, " GNET bar bridge connected")
+        Else
+            Print(Time, " GNET bar bridge unavailable; retry is throttled");
+        last_connection_state = ok;
+    End;
 End;
 
 plot1(bar_num,"bar num",red);
@@ -53,7 +54,9 @@ plot1(bar_num,"bar num",red);
 
 ## Notes
 
-- `BarStatus(1) = 2` means bar close — data is only sent once per bar, not per tick
+- `LastBarOnChart` prevents TradeStation historical-chart recalculation from flooding Redis
+- `BarStatus(1) = 2` means bar close — data is sent once per newly completed live bar
 - The `External` path must point to the compiled `BarBridge.dll`, not the `.cpp` source
 - `SendBar()` connects to `127.0.0.1:9009` (your Python TCP server must be running)
-- See `how_to_compile_and_run.md` for how to compile the DLL
+- The installed backup is `EL_files/g_cpp_dll_bar.els`
+- See [[how_to_compile_dll]] for the coordinated x86 DLL build

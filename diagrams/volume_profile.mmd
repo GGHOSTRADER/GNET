@@ -34,7 +34,7 @@ flowchart TD
     REDIS_TICK -->|"XREAD validated ticks"| XREAD
     XREAD --> PARSE
     PARSE -->|"typed Tick - high == low"| FIRST
-    FIRST -->|"yes - new day or startup"| INIT
+    FIRST -->|"yes - new 18:00 ES session or startup"| INIT
     INIT --> UPDATE
     FIRST -->|"no"| UPDATE
     UPDATE --> BOUNDS
@@ -44,7 +44,7 @@ flowchart TD
     EXTEND_LOW --> ADD
     EXTEND_HIGH --> ADD
     ADD --> GATE
-    GATE -->|"no - wait for next tick"| XREAD
+    GATE -->|"no snapshot - continue consuming ticks"| XREAD
     GATE -->|"yes - each tick timestamped in final second"| SNAPSHOT
     SNAPSHOT --> POC
     SNAPSHOT --> VA

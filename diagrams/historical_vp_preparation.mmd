@@ -21,7 +21,9 @@ flowchart TD
     RESUME["Resume with explicit conflict flag<br/>choose source with most rows"]
     FINAL["Final compressed dataset<br/>one ticks.parquet per session"]
     MANIFEST["manifest.json<br/>manifest_partitions.csv"]
-    FUTURE["Future step: replay ticks through<br/>canonical VP math for backtesting"]
+    REPLAY["Completed canonical replay<br/>one freshest row per 30-second interval"]
+    FEATURES["Historical VP feature dataset<br/>110 sessions - 184,120 rows - 32 features"]
+    CORRELATION["Pearson + Spearman analysis<br/>pair reports and diagnostics"]
 
     TS --> RAW
     RAW --> READ
@@ -39,24 +41,26 @@ flowchart TD
     DEDUPE --> FINAL
     RESUME --> FINAL
     FINAL --> MANIFEST
-    FINAL -.-> FUTURE
+    FINAL --> REPLAY
+    REPLAY --> FEATURES
+    FEATURES --> CORRELATION
 
     subgraph LEGEND["Legend"]
         L1["Raw input"]
         L2["Validation / transformation"]
         L3["Overlap decision"]
         L4["Generated output"]
-        L5["Planned future work"]
+        L5["Completed downstream analysis"]
     end
 
     classDef input fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px;
     classDef process fill:#f3f4f6,stroke:#4b5563,color:#111827,stroke-width:2px;
     classDef decision fill:#ffedd5,stroke:#ea580c,color:#431407,stroke-width:2px;
     classDef output fill:#dcfce7,stroke:#16a34a,color:#052e16,stroke-width:2px;
-    classDef future fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef analysis fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:2px;
 
     class TS,RAW,L1 input;
     class READ,VALIDATE,SESSION,STAGE,REVIEW,RESUME,L2 process;
     class OVERLAP,IDENTICAL,L3 decision;
     class SINGLE,DEDUPE,CONFLICT,FINAL,MANIFEST,L4 output;
-    class FUTURE,L5 future;
+    class REPLAY,FEATURES,CORRELATION,L5 analysis;

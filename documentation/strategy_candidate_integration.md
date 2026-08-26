@@ -47,7 +47,9 @@ a GUID candidate ID, stores it by instance, and sends it with the candidate.
 `direction` is `1` for long and `-1` for short.
 
 The router waits up to 250 ms for the feature record with the exact same
-symbol, date, time, and bar number. It then loads the model mapped to the
+symbol, date, and `time_s`. TradeStation `CurrentBar` is local to each study and
+can differ between the strategy and bar indicator, so `bar_num` remains in the
+payload only for diagnostics. The router then loads the model mapped to the
 strategy and publishes an explicit approved, rejected, or error decision.
 
 Each strategy window polls its own queue through `SignalBridge.dll`:

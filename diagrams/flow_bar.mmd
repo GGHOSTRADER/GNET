@@ -34,7 +34,7 @@ flowchart TD
     CANDIDATE_DLL["StrategyBridge.dll - generate GUID - SendCandidate() - shared connection"]
     CANDIDATE_TCP["candidate_tcp_server.py - port 9012 - validate"]
     REDIS_CANDIDATE[("Redis Stream - trade_candidates")]
-    ROUTER["strategy_router.py - exact bar match - select strategy model - infer"]
+    ROUTER["strategy_router.py - exact symbol + date + time match - select strategy model - infer"]
     REDIS_DECISION[("Redis Stream - trade_decisions")]
     SIG_SERVER["signal_tcp_server.py - port 9011 - persistent TCP server"]
     SIG_DLL["SignalBridge.dll - per-instance queues - non-blocking"]
@@ -67,15 +67,15 @@ flowchart TD
     TF -->|"14 - PUSH feature record"| REDIS_TF
     TRAINING -->|"produces"| ARTIFACTS
     STRATEGY -->|"15 - primary trade candidate only"| CANDIDATE_DLL
-    CANDIDATE_DLL -->|"16 - correlated candidate over shared TCP"| CANDIDATE_TCP
+    CANDIDATE_DLL -->|"16 - GUID candidate over shared TCP"| CANDIDATE_TCP
     CANDIDATE_TCP -->|"17 - validated candidate"| REDIS_CANDIDATE
     ARTIFACTS -->|"referenced by"| MODEL_REGISTRY
     MODEL_REGISTRY -->|"loaded once at startup"| ROUTER
     REDIS_TF -->|"18a - cache exact bar features"| ROUTER
-    REDIS_CANDIDATE -->|"18b - match symbol, date, time, bar"| ROUTER
+    REDIS_CANDIDATE -->|"18b - match symbol, date, time - bar number diagnostic only"| ROUTER
     ROUTER -->|"19 - explicit approved, rejected, or error"| REDIS_DECISION
     REDIS_DECISION -->|"20 - XREAD decision"| SIG_SERVER
-    SIG_SERVER -->|"21 - correlated decision line"| SIG_DLL
+    SIG_SERVER -->|"21 - exact-candidate decision line"| SIG_DLL
     SIG_DLL -->|"22 - RecvDecision(instance_id)"| TS_RECV
 
     subgraph PIPELINES ["Feature Pipelines - read only - no re-validation"]

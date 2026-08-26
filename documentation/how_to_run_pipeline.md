@@ -129,11 +129,9 @@ cd C:\Users\g_med\python_new\GNET
 This emergency command can discard unsaved TradeStation workspace changes. It
 does not stop GNET, Docker, Redis, or unrelated applications.
 
-For service terminals created before PID tracking was introduced, `stop.ps1`
-uses a narrow compatibility fallback: it stops only Python/PowerShell command
-lines matching the exact nine GNET module names. Unrelated Python processes are
-not targeted. After the next `launch_grid.ps1`, normal shutdown uses the exact
-PID plus process start time to protect against PID reuse.
+`stop.ps1` uses narrow allowlists for the exact nine Python module names and the
+allowlisted `run_service_terminal.ps1 -ServiceKey ...` grid-pane hosts.
+Unrelated Python, PowerShell, and Windows Terminal processes are not targeted.
 
 If shutdown prints `Could not disable the watchdog: Access is denied`, the
 service stop still proceeds, but Windows did not permit Scheduled Task control.
@@ -145,6 +143,29 @@ cd C:\Users\g_med\python_new\GNET
 ```
 
 Then run `stop.ps1` again if the watchdog had already restarted any service.
+
+The full shutdown command is idempotent. If Docker Desktop and its engine are
+already down, it reports `Docker engine is already unavailable` and completes
+successfully instead of treating the unavailable Docker API as a Redis stop
+failure:
+
+```powershell
+.\stop.ps1 -StopTradeStation -StopDockerDesktop
+```
+
+### Grid launcher troubleshooting
+
+Every pane is started through the quoting-safe, allowlisted entry point
+`automation/run_service_terminal.ps1`. If a grid launch is interrupted, close
+the incomplete `GNET` Windows Terminal window, run `.\stop.ps1`, and retry:
+
+```powershell
+.\launch_grid.ps1
+```
+
+Do not copy inline `$host.UI...; python -m ...` commands into `wt.exe`; Windows
+Terminal treats semicolons as command separators. The service runner exists to
+avoid that parsing ambiguity.
 
 ### Destructive Redis hard reset
 
@@ -354,6 +375,11 @@ See [[how_to_compile_dll]] if any DLL needs to be rebuilt.
 This chart supplies OHLC, VWAP, tick-volume proxies, symbol, date, time, and
 bar number. It is a centralized data producer; do not add one copy for every
 strategy window unless a different symbol or bar series needs its own data.
+The hardened indicator uses `LastBarOnChart and BarStatus(1) = 2`, so the bars
+already visible in TradeStation are not replayed to Python. The transformer
+currently starts with an empty 60-bar window and therefore needs 60 newly
+received live bars after a fresh service start; chart history and Redis warm
+bootstrap are not wired into that startup path yet.
 
 ### Central tick chart
 
@@ -363,6 +389,17 @@ strategy window unless a different symbol or bar series needs its own data.
 This chart supplies the tick stream used by the volume-profile process. The
 current MA model does not consume volume-profile features, but the tick sender
 is required when running that part of the pipeline.
+
+Verify the saved documents before enabling them:
+
+- `g_cpp_dll_bar` must declare `BarBridge.dll` and `SendBar` only;
+- `g_cpp_dll_tick` must declare `TickBridge.dll` and `SendTick` only.
+
+Both DLLs are process-wide within TradeStation. A mistakenly saved `SendTick`
+call on an aggregated chart mixes cumulative bar values into port 9010 and
+causes `high != low` or backward `bar_num` validator errors. If a tick-chart
+reload legitimately resets `CurrentBar`, restart only the Tick Validator pane
+so its in-memory sequence baseline starts from the new live sequence.
 
 ### MA strategy windows
 

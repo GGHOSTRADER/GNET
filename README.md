@@ -205,7 +205,7 @@ Redis: `127.0.0.1:6381` (Docker)
 | `feat_files/transformer_features.py` | 13 features, 60-bar rolling window |
 | `feat_files/volume_profile.py` | Stateful POC/Value Area; currently may emit multiple final-second snapshots |
 | `inference/candidate_tcp_server.py` | Validates candidates and publishes `trade_candidates` |
-| `inference/strategy_router.py` | Exact feature join, model selection, inference, decision publishing |
+| `inference/strategy_router.py` | Exact symbol/date/time feature join, model selection, inference, decision publishing; bar number remains diagnostic |
 | `inference/model_registry.py` | Discovers and validates directory-backed strategy models |
 | `inference/signal_tcp_server.py` | Serves exact-candidate `trade_decisions` over TCP 9011 |
 | `gnet_ui/server.py` | Local model-registry page on port 9020 |

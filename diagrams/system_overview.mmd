@@ -11,6 +11,7 @@ flowchart TD
     LEGEND_SHARED["Gray: Shared infrastructure"]
     LEGEND_STRATEGY["Purple: Strategy candidate and decision path"]
 
+    LAUNCHER["launch_grid.ps1 - one Windows Terminal window - 3 tabs - 9 independent panes"]
     TS([TradeStation])
     LEGEND_BAR ~~~ LEGEND_TICK
     LEGEND_TICK ~~~ LEGEND_SHARED
@@ -21,12 +22,12 @@ flowchart TD
     TS -->|"every tick"| TICK_DLL["TickBridge.dll - port 9010"]
 
     BAR_DLL -->|"CSV"| BAR_SERVER["tcp_to_redis_connection.py - parse - validate - encode"]
-    TICK_DLL -->|"CSV"| TICK_SERVER["tcp_to_redis_ticks.py - raw passthrough only"]
+    TICK_DLL -->|"CSV"| TICK_SERVER["tcp_to_redis_ticks.py - raw passthrough + ingress timestamp"]
 
     BAR_SERVER -->|"validated_bar"| REDIS[("Redis - Docker port 6381 - bar, tick, feature, candidate, and decision streams")]
     TICK_SERVER -->|"tick_data_raw"| REDIS
 
-    REDIS -->|"tick_data_raw"| VALIDATOR["tick_validator.py - cast - validate"]
+    REDIS -->|"tick_data_raw"| VALIDATOR["tick_validator.py - cast - validate + stage timestamp"]
     VALIDATOR -->|"tick_data_validated"| REDIS
 
     REDIS -->|"validated_bar"| TF["transformer_features.py - Redis orchestration and publishing"]
@@ -40,10 +41,10 @@ flowchart TD
     VP -->|"features_volume_profile - qualifying final-second ticks"| REDIS
 
     TS -->|"only when a primary strategy proposes a trade"| STRATEGY_DLL["StrategyBridge.dll - shared port 9012"]
-    STRATEGY_DLL -->|"strategy + instance + GUID + bar identity"| CANDIDATE_SERVER["candidate_tcp_server.py - validate and publish"]
+    STRATEGY_DLL -->|"strategy + instance + GUID + timestamp identity + diagnostic bar number"| CANDIDATE_SERVER["candidate_tcp_server.py - validate and publish"]
     CANDIDATE_SERVER -->|"trade_candidates"| REDIS
 
-    REDIS -->|"exact features plus durable candidate group"| ROUTER["strategy_router.py - exact bar match - model selection - inference - ACK after decision publish"]
+    REDIS -->|"exact timestamped features plus durable candidate group"| ROUTER["strategy_router.py - symbol + date + time match - model selection - inference - ACK after decision publish"]
     TRAINING["training_mlp - offline MA training"] -->|"produces"| ARTIFACTS["MA2CrossLE model artifacts - model_best.pt - scaler_best.pkl - config.json"]
     ARTIFACTS -->|"referenced by"| REGISTRY["model_registry directories - enabled - threshold - device"]
     UI["Local registry page - 127.0.0.1:9020"] -->|"validated configuration edits"| REGISTRY
@@ -51,7 +52,7 @@ flowchart TD
     ROUTER -->|"trade_decisions - approved or rejected"| REDIS
 
     REDIS -->|"durable decision consumer group"| SIG_SERVER["signal_tcp_server.py - port 9011 - ACK after TCP delivery"]
-    SIG_SERVER -->|"correlated instance decision"| SIG_DLL["SignalBridge.dll - per-instance queues"]
+    SIG_SERVER -->|"exact-candidate decision"| SIG_DLL["SignalBridge.dll - per-instance queues"]
     SIG_DLL -->|"matching candidate decision"| TS
 
     classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
@@ -60,10 +61,12 @@ flowchart TD
     classDef strategyPath fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
     WATCHDOG["Windows Task Scheduler - ON or OFF - watchdog restarts failed Python services"] -.-> ROUTER
     WATCHDOG -.-> TF
+    LAUNCHER -.->|"starts TradeStation only after readiness"| TS
+    LAUNCHER -.->|"starts and groups Python services"| ROUTER
 
     class BAR_DLL,BAR_SERVER,TF,CANONICAL,TRAINING,ARTIFACTS,REGISTRY barPath
     class TICK_DLL,TICK_SERVER,VALIDATOR,VP,CANONICAL_VP tickPath
-    class TS,REDIS,UI,WATCHDOG sharedPath
+    class TS,REDIS,UI,WATCHDOG,LAUNCHER sharedPath
     class STRATEGY_DLL,CANDIDATE_SERVER,ROUTER,SIG_SERVER,SIG_DLL strategyPath
     class LEGEND_BAR barPath
     class LEGEND_TICK tickPath

@@ -128,7 +128,7 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 - The sender DLLs intentionally drop a payload when the endpoint or socket is
   unavailable; they do not create an unbounded queue inside TradeStation.
 - `BarBridge` and `TickBridge` are persistent clients (connect once, stream data)
-- `SignalBridge` queues decisions by strategy ID and uses non-blocking recv — each window can retrieve only its own decision
+- `SignalBridge` queues decisions by strategy-instance ID and uses non-blocking recv — each window can retrieve only its own decision
 - See [[how_to_run_pipeline]] for the correct start order
 
 ### Troubleshooting: "Cannot find DLL library file"

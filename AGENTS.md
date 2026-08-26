@@ -121,6 +121,10 @@ Redis is at `127.0.0.1:6381` (Docker container named `redis1`).
 
 ## Design Conventions
 
+### Terminal Hotkeys
+- Never add, remove, remap, or otherwise modify terminal or Windows Terminal keyboard shortcuts unless the user explicitly requests the exact hotkey change.
+- Terminal layout and launcher work must preserve all existing user keybindings. In particular, keep `Alt+Enter` available to terminal applications for multiline input.
+
 ### Clean Architecture Layering (enforced throughout)
 - **Domain** (`bar_contract.py`): pure types and invariants; no I/O, no Redis.
 - **Adapter** (codec + TCP servers): transport ↔ domain conversion at the boundary only.

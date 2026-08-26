@@ -14,6 +14,7 @@ Vars:
     yyyymmdd(0),
     bar_num(0),
     ok(0),
+    last_connection_state(-1),
     TimeSpan hhmmss(null);
 
 { EasyLanguage DLL declaration }
@@ -28,21 +29,31 @@ External: "C:\Users\g_med\python_new\GNET\EL_files\TickBridge.dll", int, "SendTi
     int,        { down    }
     int;        { bar_num }
 
-{ Fire on every tick - no BarStatus filter }
-yyyymmdd = Date;
-hhmmss   = bardatetime.timeofday;
-bar_num  = Currentbar;
+{ Fire only from the live chart bar; never replay historical bars into TCP. }
+If LastBarOnChart Then Begin
+    yyyymmdd = Date;
+    hhmmss   = bardatetime.timeofday;
+    bar_num  = Currentbar;
 
-ok = SendTick(
-    Symbol,
-    yyyymmdd,
-    Intportion(hhmmss.TotalSeconds),
-    High,
-    Low,
-    Upticks,
-    Downticks,
-    bar_num
-);
+    ok = SendTick(
+        Symbol,
+        yyyymmdd,
+        Intportion(hhmmss.TotalSeconds),
+        High,
+        Low,
+        Upticks,
+        Downticks,
+        bar_num
+    );
+
+    If ok <> last_connection_state Then Begin
+        If ok = 1 Then
+            Print(Time, " GNET tick bridge connected")
+        Else
+            Print(Time, " GNET tick bridge unavailable; retry is throttled");
+        last_connection_state = ok;
+    End;
+End;
 
 
 plot1(bar_num,"bar num",red);
@@ -73,6 +84,9 @@ cl /LD /EHsc tick_dll.cpp ws2_32.lib /Fe:TickBridge.dll
 ## Notes
 
 - Apply this indicator to a **tick chart** in TradeStation
+- Apply exactly one tick sender per intended symbol/series; every caller of the shared DLL uses port 9010
+- `LastBarOnChart` excludes historical replay but does not convert an aggregated bar into a tick
 - `high == low` for every tick — single price point per tick
 - `TickBridge.dll` must be compiled before applying the indicator
 - `SendTick()` connects to `127.0.0.1:9010` — `tcp_to_redis_ticks.py` must be running first
+- The installed backup is `EL_files/g_cpp_dll_tick.els`

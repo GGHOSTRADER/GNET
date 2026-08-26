@@ -10,23 +10,24 @@ flowchart TD
     DLL["TickBridge.dll - C++ Win32 - SendTick()"]
     TCP_SOCK["TCP Socket - port 9010 - tcp_to_redis_ticks.py"]
     BUF["Line Buffer - split on newline"]
-    XADD["r.xadd - field: raw_tick - NO parsing - NO validation"]
+    XADD["r.xadd - raw_tick + tcp_received_ns - NO parsing - NO validation"]
     REDIS_RAW[("Redis Stream - tick_data_raw")]
 
     XREAD["r.xread - block=100ms - count=500 - tick_validator.py"]
-    EXTRACT["parse_xread_raw_ticks - tick_codec.py - extract raw_tick field"]
+    EXTRACT["parse_xread_raw_tick_records - tick_codec.py - raw line + transport metadata"]
     CAST["parse_raw_tick_line - tick_codec.py - cast str to int and float"]
     VAL_TICK["validate_tick - tick_contract.py - enforce invariants - high == low"]
     VAL_SEQ["validate_tick_sequence - tick_contract.py - enforce bar_num monotonicity"]
-    ENCODE["tick_to_redis_fields - tick_codec.py - encode typed Tick to strings"]
+    ENCODE["tick_to_redis_fields - encode Tick + tcp and validator timestamps"]
     REDIS_CLEAN[("Redis Stream - tick_data_validated")]
     DROP["Drop and Log - TickDecodeError or TickContractError"]
 
     VP_READ["stream_ticks_from_redis - volume_profile.py - xread tick_data_validated"]
     VP_UPDATE["_update - O(1) profile update - profile[index] += volume - every tick"]
     VP_GATE{"time_s % snapshot_interval_s == interval - 1 ?"}
-    VP_SNAP["_snapshot - POC + Value Area + derived POC features - runs on each qualifying tick"]
+    VP_SNAP["_snapshot - POC + Value Area + canonical 32 features - runs on each qualifying tick"]
     REDIS_VP[("Redis Stream - features_volume_profile - maxlen 50000 - may contain multiple entries per interval")]
+    PROFILER["tick_pipeline_profiler.py - exact tick join - p50 p95 p99 max per hop"]
 
     TS -->|"1 - SEND on every tick"| DLL
     DLL -->|"2 - WRITE CSV bytes to TCP"| TCP_SOCK
@@ -48,9 +49,12 @@ flowchart TD
     REDIS_CLEAN -->|"13 - XREAD validated ticks"| VP_READ
     VP_READ -->|"14 - typed Tick"| VP_UPDATE
     VP_UPDATE --> VP_GATE
-    VP_GATE -->|"no - wait for next tick"| VP_READ
+    VP_GATE -->|"no snapshot - continue consuming ticks"| VP_READ
     VP_GATE -->|"15 - yes, tick timestamp is in final second"| VP_SNAP
     VP_SNAP -->|"16 - PUSH POC + VA + derived features"| REDIS_VP
+    REDIS_RAW -.-> PROFILER
+    REDIS_CLEAN -.-> PROFILER
+    REDIS_VP -.-> PROFILER
 
     subgraph INGEST ["Ingest - tcp_to_redis_ticks.py - drain kernel buffer only"]
         TCP_SOCK
@@ -77,5 +81,5 @@ flowchart TD
 
     classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
-    class DLL,TCP_SOCK,BUF,XADD,REDIS_RAW,XREAD,EXTRACT,CAST,VAL_TICK,VAL_SEQ,ENCODE,REDIS_CLEAN,DROP,VP_READ,VP_UPDATE,VP_GATE,VP_SNAP,REDIS_VP tickPath
+    class DLL,TCP_SOCK,BUF,XADD,REDIS_RAW,XREAD,EXTRACT,CAST,VAL_TICK,VAL_SEQ,ENCODE,REDIS_CLEAN,DROP,VP_READ,VP_UPDATE,VP_GATE,VP_SNAP,REDIS_VP,PROFILER tickPath
     class TS sharedPath

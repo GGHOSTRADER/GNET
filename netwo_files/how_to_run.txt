@@ -1,7 +1,7 @@
 LEGACY BAR-INGESTION GUIDE (NOT THE FULL PIPELINE)
 ==================================================
 
-For the current eight-service pipeline, candidate router, ports 9011/9012,
+For the current nine-service pipeline, candidate router, ports 9011/9012,
 and TradeStation setup, use:
 
     documentation/how_to_run_pipeline.md

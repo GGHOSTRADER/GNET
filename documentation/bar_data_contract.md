@@ -17,8 +17,8 @@
 | 5   | High       | float  | Highest price in interval                |
 | 6   | Low        | float  | Lowest price in interval                 |
 | 7   | Close      | float  | Last price in interval                   |
-| 8   | Up         | int    | Market buy orders                        |
-| 9   | Down       | int    | Market sell orders                       |
+| 8   | Up         | int    | TradeStation-classified uptick volume proxy |
+| 9   | Down       | int    | TradeStation-classified downtick volume proxy |
 | 10  | VWAP       | float  | Volume Weighted Average Price since open |
 | 11  | Bar Number | int    | Bar sequence number                      |
 
@@ -65,12 +65,12 @@ TOTAL SECONDS = X + Y + Z
 
 ### 8 — Up
 - **Type:** Integer
-- **Meaning:** Market buy orders
+- **Meaning:** TradeStation-classified uptick volume proxy
 - **Invariants:** `up >= 0`, `isinstance(up, int)`
 
 ### 9 — Down
 - **Type:** Integer
-- **Meaning:** Market sell orders
+- **Meaning:** TradeStation-classified downtick volume proxy
 - **Invariants:** `down >= 0`, `isinstance(down, int)`
 
 ### 10 — VWAP

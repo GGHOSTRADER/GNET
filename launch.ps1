@@ -46,6 +46,14 @@ function Open-Terminal {
                 "-ServiceKey", $ServiceKey
             )
         } else {
+            # split-pane targets the active tab, which can change while readiness
+            # checks and other windows receive focus. Select the assigned tab
+            # explicitly so the grid remains exactly three panes per tab.
+            & $script:WindowsTerminal "-w" "GNET" "focus-tab" "--target" $tabIndex
+            if ($LASTEXITCODE -ne 0) {
+                throw "Windows Terminal failed to select grid tab $tabIndex for '$Title'."
+            }
+            Start-Sleep -Milliseconds 100
             $paneSize = if ($position -eq 1) { "0.666" } else { "0.5" }
             $arguments = @(
                 "-w", "GNET", "split-pane", "-V", "--size", $paneSize,

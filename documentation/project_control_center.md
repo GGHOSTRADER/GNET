@@ -11,7 +11,7 @@
 | 4 | Python TCP server receives, parses, validates, pushes to Redis | `tcp_to_redis_connection.py` | [[bar_data_contract]] |
 | 5 | Feature pipelines read from Redis and compute | `transformer_features.py` / `volume_profile.py` | [[features_list]] |
 | 6 | A strategy sends a candidate only when its primary signal fires | `StrategyBridge.dll` / `candidate_tcp_server.py` | [[strategy_candidate_integration]] |
-| 7 | Router joins the exact feature bar, selects the model, and writes a decision | `inference/strategy_router.py` | [[features_list]] |
+| 7 | Router joins the exact symbol/date/time feature row, selects the model, and writes a decision | `inference/strategy_router.py` | [[features_list]] |
 | 8 | Decision TCP server returns the exact candidate's result to the correct strategy window | `signal_tcp_server.py` / `SignalBridge.dll` | [[strategy_candidate_integration]] |
 
 ---
@@ -70,7 +70,7 @@ Separate high-frequency pipeline. Ingest and validation are split into two proce
 | File | Reads From | Features | Window |
 |---|---|---|---|
 | `feat_files/transformer_features.py` | `validated_bar` | `parkinson_vol`, `ofi`, `volume_percentile`, `volume_momentum`, `amihud`, `vwap_distance`, `session flags`, `day_of_week` | 60 bars |
-| `feat_files/volume_profile.py` | `tick_data_validated` | `poc_price`, `poc_volume`, `value_area_low`, `value_area_high`, `total_volume`, `poc_distance`, `poc_concentration`, `va_width`, `va_position`, `vol_above_poc_ratio`, `profile_entropy`, `profile_kurtosis`, `poc_migration` | Full session, snapshot 1s before each bar close |
+| `feat_files/volume_profile.py` | `tick_data_validated` | Canonical 32-feature VP contract: classified delta, Value Area dynamics, shape, acceptance, POC velocity, and HVN/LVN groups | Full 18:00 ES session; current live adapter may publish multiple final-second snapshots |
 
 See [[volume_profile_design]] for volume profile design and API. See [[features_list]] for full feature reference.
 
@@ -80,7 +80,8 @@ See [[volume_profile_design]] for volume profile design and API. See [[features_
 
 Features continue to publish every bar. Models run only after a primary
 strategy candidate arrives. The router requires an exact symbol, date, time,
-and bar-number match; it never substitutes the latest feature record.
+match; it never substitutes the latest feature record. TradeStation bar number
+is retained as study-local diagnostic metadata and is not part of the join key.
 
 | File | Role |
 |---|---|
@@ -90,7 +91,7 @@ and bar-number match; it never substitutes the latest feature record.
 | `inference/model_registry.py` | Discovers and validates enabled models from `model_registry/*/registry.json` |
 | `gnet_ui/server.py` | Optional local registry page on `127.0.0.1:9020`; outside the inference path |
 | `inference/signal_tcp_server.py` | Reads `trade_decisions` and forwards exact-candidate decisions on port 9011 |
-| `EL_files/signal_dll.cpp` | Queues decisions by strategy ID for non-blocking TradeStation polling |
+| `EL_files/signal_dll.cpp` | Queues decisions by strategy-instance ID for non-blocking TradeStation polling |
 | `EL_files/SignalBridge.dll` | Compiled DLL loaded by TradeStation |
 | `training_mlp/strategies/MA2CrossLE/model/mlp_baseline/` | MA model, scaler, and configuration loaded once by the router |
 
@@ -135,9 +136,12 @@ Candidate and decision schemas are documented in [[strategy_candidate_integratio
 
 ### 1. Run the Launch Script
 ```bash
-.\launch.ps1
+.\launch_grid.ps1
 ```
-Starts Docker Desktop and Redis, launches all nine services in consumer-first order, then opens TradeStation and the registry page after the TCP listeners are ready.
+Starts Docker Desktop and Redis, launches all nine services in consumer-first
+order inside one Windows Terminal window with three tabs, then opens
+TradeStation and the registry page after the TCP listeners are ready. Use
+`.\launch.ps1` for the legacy nine-window layout.
 
 ### 2. Start the Bar TCP Server
 ```bash
@@ -166,7 +170,7 @@ python -m feat_files.transformer_features
 # Terminal 1 — receives all strategy candidates on shared port 9012
 python -m inference.candidate_tcp_server
 
-# Terminal 2 — exact feature join and model inference
+# Terminal 2 — exact symbol/date/time feature join and model inference
 python -m inference.strategy_router
 
 # Terminal 3 — serves exact-candidate decisions to TradeStation
