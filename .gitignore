@@ -2,12 +2,18 @@
 __pycache__/
 *.pyc
 *.pyo
+.venv/
 
 # Tests
 .pytest_cache/
+/.test_artifacts/
+/.tmp_pytest_*/
 
 # Local runtime PID registry
 /.runtime/
+/acceptance/
+/live_test_runs/
+/memory_logs/
 
 # Obsidian
 .obsidian/
@@ -26,10 +32,47 @@ __pycache__/
 report_rl_transformer.pdf
 report_pipeline.md
 
+# Generated artifacts and local deliverables
+/.artifacts/
+/.codex-finalizer-*/
+/tmp/
+/output/
+/deliverables/
+
+# Local training datasets, experiments, models, and reports
+/training_mlp/charts/
+/training_mlp/experiments/
+/training_mlp/strategies/*/inputs/
+/training_mlp/strategies/*/processed/
+/training_mlp/strategies/*/model/
+/training_mlp/strategies/*/reports/
+
+# Model and columnar artifacts generated outside the standard folders
+*.pt
+*.pth
+*.pkl
+*.npy
+*.npz
+*.parquet
+*.onnx
+*.joblib
+
 # Local historical volume-profile exports
 /historical_vp/raw/
 /historical_vp/prepared/
 /historical_vp/features/
+
+# Local incremental and generated 30-second MA bar exports
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_update_*.txt
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_master.txt
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_master_merged.txt
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_master_merged.manifest.json
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_master_merged_conflicts.csv
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_master_merged_overlap_sessions.csv
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_merged.txt
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_merged.manifest.json
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_merged_conflicts.csv
+/training_mlp/strategies/MA2CrossLE/inputs/data_30_merged_overlap_sessions.csv
 
 # wandb
 training_mlp/wandb/
