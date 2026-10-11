@@ -1,0 +1,87 @@
+---
+title: GNET - Online Trading Architecture
+config:
+  themeCSS: |
+    .titleText { font-size: 34px !important; font-weight: 700 !important; }
+---
+flowchart TB
+
+    subgraph LEGEND["Legend"]
+        direction LR
+        LBAR["Blue: 30-second bars"]
+        LTICK["Green: ticks and volume profile"]
+        LDECISION["Purple: candidate and decision"]
+        LSHARED["Gray: shared infrastructure"]
+        LOFFLINE["Orange: offline-produced artifacts"]
+    end
+
+    TS["TradeStation<br/>separate bar, tick and strategy windows"]
+
+    subgraph BAR_PATH["Live bar path"]
+        direction LR
+        BAR_DLL["Bar bridge<br/>port 9009"]
+        BAR_VALIDATE["Bar validation"]
+        BAR_FEATURES["Live feature publisher"]
+        CANON_MA["Shared canonical MA math<br/>13 features"]
+    end
+
+    subgraph TICK_PATH["Live tick and VP path"]
+        direction LR
+        TICK_DLL["Tick bridge<br/>port 9010"]
+        TICK_VALIDATE["Tick validation"]
+        VP_PUBLISHER["VP snapshot publisher<br/>before bar close"]
+        CANON_VP["Shared canonical VP math<br/>32 features"]
+    end
+
+    REDIS[("Redis<br/>bars, ticks, features, candidates and decisions")]
+
+    TS -->|"completed 30-second bar"| BAR_DLL --> BAR_VALIDATE --> BAR_FEATURES
+    BAR_FEATURES -->|"calls"| CANON_MA
+    CANON_MA -.->|"returns values"| BAR_FEATURES
+    BAR_FEATURES -->|"13-feature row"| REDIS
+
+    TS -->|"every tick"| TICK_DLL --> TICK_VALIDATE --> VP_PUBLISHER
+    VP_PUBLISHER -->|"calls"| CANON_VP
+    CANON_VP -.->|"returns values"| VP_PUBLISHER
+    VP_PUBLISHER -->|"fresh VP snapshot"| REDIS
+
+    OFFLINE["Offline training<br/>produces versioned model, scaler and feature contract"]
+    REGISTRY["Model registry and local browser"]
+    OFFLINE --> REGISTRY
+
+    subgraph DECISION_PATH["Exact live candidate decision"]
+        direction LR
+        CANDIDATE_DLL["Shared strategy bridge<br/>port 9012"]
+        ROUTER["Strategy router<br/>select model and required features"]
+        DECISION["Approve or reject"]
+        SIGNAL_SERVER["Decision server<br/>port 9011"]
+        SIGNAL_DLL["Per-instance decision bridge"]
+        ORDER["Matching TradeStation strategy window"]
+        ACK["Exact EasyLanguage ACK"]
+    end
+
+    TS -->|"primary strategy proposes a trade"| CANDIDATE_DLL -->|"exact GUID candidate"| REDIS
+    REDIS -->|"candidate + required feature contract"| ROUTER
+    REGISTRY -->|"enabled model"| ROUTER
+    ROUTER --> DECISION --> REDIS --> SIGNAL_SERVER --> SIGNAL_DLL --> ORDER
+    ORDER --> ACK -->|"only then clear pending Redis decision"| REDIS
+
+    OPS["Launcher, watchdog, Docker and monitoring"] -.-> REDIS
+    OPS -.-> ROUTER
+
+    classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef decisionPath fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
+    classDef sharedPath fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px
+    classDef offlinePath fill:#ffedd5,stroke:#ea580c,color:#7c2d12,stroke-width:2px
+
+    class BAR_DLL,BAR_VALIDATE,BAR_FEATURES,CANON_MA barPath
+    class TICK_DLL,TICK_VALIDATE,VP_PUBLISHER,CANON_VP tickPath
+    class CANDIDATE_DLL,ROUTER,DECISION,SIGNAL_SERVER,SIGNAL_DLL,ORDER,ACK decisionPath
+    class TS,REDIS,REGISTRY,OPS sharedPath
+    class OFFLINE offlinePath
+    class LBAR barPath
+    class LTICK tickPath
+    class LDECISION decisionPath
+    class LSHARED sharedPath
+    class LOFFLINE offlinePath

@@ -1,0 +1,31 @@
+{
+  "tick_root": "../historical_vp/prepared_spliced_2026_09_21",
+  "output": "../.artifacts/backtester/ma_cross_example",
+  "start_session": "2026-06-15",
+  "end_session": "2026-09-17",
+  "bars": [{"kind": "time", "size": 30}],
+  "execution_mode": "sweep",
+  "results": {"initial_capital": null, "equity_sample_seconds": 60, "sessions_per_year": 252},
+  "strategy": {
+    "name": "ma_cross",
+    "parameters": {"fast": 9, "slow": 18, "reset_each_session": false}
+  },
+  "session_exit": "flatten",
+  "flatten_lead_seconds": 60,
+  "round_trip_cost": 6.48,
+  "slippage_ticks": 0,
+  "profits": [1, 2, 3, 4, 6, 8, 12, 16],
+  "stops": [1, 2, 3, 4, 6, 8, 12, 16],
+  "holds": [30, 60, 120, 300],
+  "workers": 4,
+  "policy_batch_size": 4,
+  "max_evaluations": 64,
+  "max_seconds": 3600,
+  "patience": 2,
+  "jump_factor": 3,
+  "failed_jumps": 2,
+  "search_regions": 3,
+  "min_trades": 10,
+  "time_blocks": 3,
+  "region_min_positive_blocks": 2
+}

@@ -137,6 +137,16 @@ from typing import Any, Dict, Mapping
 from netwo_files.bar_contract import Bar, validate_bar
 
 
+BAR_MODE_LIVE = "live"
+BAR_MODE_BOOTSTRAP = "bootstrap"
+BAR_MODE_BOOTSTRAP_END = "bootstrap_end"
+_WIRE_MODE_NAMES = {
+    0: BAR_MODE_LIVE,
+    1: BAR_MODE_BOOTSTRAP,
+    2: BAR_MODE_BOOTSTRAP_END,
+}
+
+
 # #1 --------------------------------------------------------------------------
 def parse_csv_line(line: str) -> Bar:
     """
@@ -182,6 +192,20 @@ def parse_csv_line(line: str) -> Bar:
     # Now enforce your invariants on typed values
     validate_bar(b)
     return b
+
+
+def parse_bar_wire_line(line: str) -> tuple[str, Bar]:
+    """Decode legacy live lines or mode-prefixed bootstrap/live lines."""
+    parts = [part.strip() for part in line.strip().split(",")]
+    if len(parts) == 11:
+        return BAR_MODE_LIVE, parse_csv_line(line)
+    if len(parts) != 12:
+        raise DecodeError(f"expected 11 legacy or 12 mode-prefixed fields, got {len(parts)}")
+    try:
+        mode = _WIRE_MODE_NAMES[int(parts[0])]
+    except (ValueError, KeyError) as exc:
+        raise DecodeError(f"invalid bar mode: {parts[0]!r}") from exc
+    return mode, parse_csv_line(",".join(parts[1:]))
 
 
 # #2 --------------------------------------------------------------------------
@@ -271,7 +295,7 @@ def bar_from_redis_fields(fields: Mapping[Any, Any]) -> Bar:
 
 
 # #5 --------------------------------------------------------------------------
-def bar_to_redis_fields(b: Bar) -> Dict[str, str]:
+def bar_to_redis_fields(b: Bar, *, ingest_mode: str | None = None) -> Dict[str, str]:
     """
     Encode a typed Bar into Redis Stream fields.
 
@@ -294,7 +318,7 @@ def bar_to_redis_fields(b: Bar) -> Dict[str, str]:
     """
     validate_bar(b)
 
-    return {
+    fields = {
         "symbol": b.symbol,
         "date": f"{b.date:06d}",
         "time": str(b.time_s),
@@ -307,6 +331,15 @@ def bar_to_redis_fields(b: Bar) -> Dict[str, str]:
         "vwap": repr(b.vwap),
         "bar_num": str(b.bar_num),
     }
+    if ingest_mode is not None:
+        if ingest_mode not in {
+            BAR_MODE_LIVE,
+            BAR_MODE_BOOTSTRAP,
+            BAR_MODE_BOOTSTRAP_END,
+        }:
+            raise DecodeError(f"invalid ingest_mode: {ingest_mode!r}")
+        fields["ingest_mode"] = ingest_mode
+    return fields
 
 
 # #6 --------------------------------------------------------------------------

@@ -10,7 +10,7 @@ All features are computed in `feat_files/transformer_features.py` from a 60-bar 
 | volume_percentile       | float | Where current volume ranks vs last 60 bars (0–1)                                   |
 | volume_momentum         | float | Volume % change over last 5 bars                                                   |
 | amihud_illiquidity      | float | Rolling 30-bar mean of \|pct_change(Close)\| / (Close × Volume) — price impact per dollar traded |
-| vwap_distance           | float | How far price is from VWAP, normalized by ATR                                      |
+| vwap_distance           | float | Canonical live mode: `(Close - ES-session cumulative VWAP) / ATR(14)`, where VWAP is `sum(30-second bar Close × (Up + Down)) / sum(Up + Down)` since the 6 p.m. ET ES session start. Bar timestamps must use ET; exchange-time (CT) charts require a 5 p.m. reset configuration. The separate offline TradeStation-style experiment uses bar-supplied VWAP. |
 | minutes_since_open      | float | Minutes elapsed since 09:30 open                                                   |
 | is_first_last_30min     | int   | Binary flag — 1 if in first or last 30min of session                               |
 | day_of_week             | int   | Day of week — Monday=0 … Friday=4. Derived from `bar.date` (YYYYMMDD)             |

@@ -120,28 +120,74 @@ def metalabel(df, signal):
 
 # ── 3. FEATURE ENGINEERING ────────────────────────────────────────────────────
 
-def engineer_features(bars_df):
-    """Build training features with the same engine used by the live stream."""
+def engineer_features(bars_df, *, vwap_column=None, vwap_mode="bar", reset_at=None):
+    """Build features with reconstructed VWAP or an explicitly supplied series.
+
+    TradeStation defines bar AvgPrice as OHLC/4 and its daily VWAP weights that
+    value by bar volume.  For electronic futures charts configured with
+    ``For volume, use: Trade Vol``, UpTicks + DownTicks is contract volume.
+    """
+    if vwap_mode not in {"bar", "canonical"}:
+        raise ValueError(f"unknown VWAP mode: {vwap_mode}")
+    if vwap_mode == "canonical" and vwap_column is not None:
+        raise ValueError("canonical VWAP cannot use an external VWAP column")
     df = bars_df.copy().reset_index(drop=True)
-    engine = FeatureEngine()
+    if vwap_mode == "canonical":
+        df["_tradestation_vwap"] = np.nan
+    elif vwap_column is None:
+        volume = pd.to_numeric(df["Up"], errors="coerce") + pd.to_numeric(
+            df["Down"], errors="coerce"
+        )
+        average_price = (
+            pd.to_numeric(df["Open"], errors="coerce")
+            + pd.to_numeric(df["High"], errors="coerce")
+            + pd.to_numeric(df["Low"], errors="coerce")
+            + pd.to_numeric(df["Close"], errors="coerce")
+        ) / 4.0
+        calendar_day = pd.to_datetime(df["Date/Time"]).dt.date
+        cumulative_volume = volume.groupby(calendar_day, sort=False).cumsum()
+        cumulative_price_volume = (average_price * volume).groupby(
+            calendar_day, sort=False
+        ).cumsum()
+        df["_tradestation_vwap"] = cumulative_price_volume / cumulative_volume.replace(0, np.nan)
+    else:
+        if vwap_column not in df.columns:
+            raise ValueError(f"native VWAP column is missing: {vwap_column}")
+        df["_tradestation_vwap"] = pd.to_numeric(df[vwap_column], errors="coerce")
+        if df["_tradestation_vwap"].isna().any() or (df["_tradestation_vwap"] <= 0).any():
+            raise ValueError(f"native VWAP column contains missing or nonpositive values: {vwap_column}")
+
+    engine = FeatureEngine(vwap_mode=vwap_mode)
+    reset_timestamp = pd.Timestamp(reset_at) if reset_at is not None else None
+    reset_done = False
     rows = []
     timestamp_position = df.columns.get_loc("Date/Time")
+    vwap_position = df.columns.get_loc("_tradestation_vwap")
     for row in df.itertuples(index=False):
         timestamp = row[timestamp_position]
+        if reset_timestamp is not None and not reset_done and timestamp >= reset_timestamp:
+            if timestamp != reset_timestamp:
+                raise ValueError(f"feature reset boundary is not a bar timestamp: {reset_timestamp}")
+            engine = FeatureEngine(vwap_mode=vwap_mode)
+            reset_done = True
         bar = SimpleNamespace(
             date=timestamp.date(),
             time_s=timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second,
             high=float(row.High), low=float(row.Low), close=float(row.Close),
             up=int(row.Up), down=int(row.Down),
+            vwap=float(row[vwap_position]),
         )
         values = engine.update(bar)
         rows.append(
             {name: getattr(values, name) for name in FEATURE_NAMES}
             if values is not None else {name: np.nan for name in FEATURE_NAMES}
         )
+    if reset_timestamp is not None and not reset_done:
+        raise ValueError(f"feature reset boundary is outside the bars: {reset_timestamp}")
     feature_frame = pd.DataFrame(rows, index=df.index)
     for name in FEATURE_NAMES:
         df[name] = feature_frame[name]
+    df = df.drop(columns=["_tradestation_vwap"])
     return df.reset_index(drop=True)
 
 

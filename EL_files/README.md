@@ -32,7 +32,47 @@ build, then close TradeStation before installing the staged DLLs.
 signal server keeps that Redis decision pending until it receives the matching
 instance and candidate GUID, so a socket disconnect cannot silently lose it.
 
-The EasyLanguage backups send or poll only on `LastBarOnChart`, log connection
+The EasyLanguage bar backup sends one bounded bootstrap pass whenever the chart
+initializes or is reloaded with Ctrl+R, then sends only newly completed
+`LastBarOnChart` bars. Configure the 30-second chart to load 65 bars. Bootstrap
+messages rebuild feature state but cannot create TradeStation strategy candidates.
+
+The remaining EasyLanguage backups send or poll only on `LastBarOnChart`, log connection
 loss/recovery only when state changes, and never replay historical chart bars
 through TCP. `G_MA_CROSS_NN` also releases a pending candidate after its
 configurable `CandidateTimeoutBars` limit.
+
+`G_MA_CROSS_NN` contains the filtered entry plus TradeStation's built-in
+`SetStopLoss` and `SetProfitTarget` protection, both defaulted to **$50 per
+contract** for ES (one index point). Do not apply separate protective strategy
+components on the same chart. The repository backup intentionally contains no
+explicit `EntryPrice +/-` next-bar exit orders because those produced incorrect
+next-open historical fills.
+
+The strategy also draws an optional live marker on the bar where EasyLanguage
+receives an exact decision: green `GNET YES` for approval, red `GNET NO` for a
+normal model rejection, and yellow `GNET ERROR` for a non-`ok` router status.
+The marker includes probability for normal decisions. Control it with
+`ShowDecisionMarkers` and `DecisionMarkerOffsetPoints`; markers visualize live
+decision receipt and are not reconstructed from historical bars.
+
+## Intrabar execution versus historical tick reconstruction
+
+`G_MA_CROSS_NN.els` declares `[IntrabarOrderGeneration = TRUE]`. TradeStation
+may consequently show Intrabar Order Generation as already selected. Preserve
+that declaration for live trading; it lets the strategy poll for an ML decision
+and manage state between 30-second bar closes.
+
+IOG is not the same as either of these Strategy Properties settings:
+
+- **IOG optimization with Look-Inside-Bar** only reduces redundant historical
+  calculations. It does not enable IOG or provide historical ticks.
+- **One-tick Look-Inside-Bar back-testing** supplies the historical tick order
+  inside a bar and is the setting that can exhaust RAM over a multi-month range.
+
+Protective stops intended to operate on the entry bar should use TradeStation's
+built-in `SetStopLoss`/`SetProfitTarget` behavior or the equivalent prebuilt
+strategy components. An explicit `Sell ... next bar ... stop/limit` order may
+not protect the entry bar and can be filled at the following 30-second open
+after price has moved far beyond one point. Never remove IOG merely to work
+around Look-Inside-Bar memory use; shorten/chunk the historical range instead.

@@ -51,9 +51,10 @@ flowchart TD
     REGISTRY -->|"enabled models loaded once at startup"| ROUTER
     ROUTER -->|"trade_decisions - approved or rejected"| REDIS
 
-    REDIS -->|"durable decision consumer group"| SIG_SERVER["signal_tcp_server.py - port 9011 - ACK after TCP delivery"]
+    REDIS -->|"durable decision consumer group"| SIG_SERVER["signal_tcp_server.py - port 9011 - waits for exact application ACK"]
     SIG_SERVER -->|"exact-candidate decision"| SIG_DLL["SignalBridge.dll - per-instance queues"]
     SIG_DLL -->|"matching candidate decision"| TS
+    TS -.->|"EL consumed exact GUID - ACK through SignalBridge"| SIG_SERVER
 
     classDef barPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     classDef tickPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px

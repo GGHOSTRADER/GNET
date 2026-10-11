@@ -1,9 +1,15 @@
 # EasyLanguage DLL Indicator
-> **What:** EasyLanguage indicator code that runs inside TradeStation and sends bar data to the Python TCP server via `BarBridge.dll` on every bar close.
+> **What:** EasyLanguage indicator code that bootstraps a bounded chart history after initialization/reload and then sends completed live bars through `BarBridge.dll`.
 
 Sends bar data from TradeStation to the Python TCP server through `BarBridge.dll` (compiled from `dll.cpp`).
 
 ## EasyLanguage Code
+
+The authoritative, importable source is `EL_files/g_cpp_dll_bar.els`. It uses
+the `SendBarMode` export so Python can distinguish `BOOTSTRAP`,
+`BOOTSTRAP_END`, and `LIVE` records. Configure the chart for 65 loaded bars.
+The older excerpt below documents the legacy live-only interface and must not
+be pasted over the current TradeStation document.
 
 ```pascal
 { GNET live 30-second bar sender through BarBridge.dll }
@@ -54,9 +60,9 @@ plot1(bar_num,"bar num",red);
 
 ## Notes
 
-- `LastBarOnChart` prevents TradeStation historical-chart recalculation from flooding Redis
-- `BarStatus(1) = 2` means bar close — data is sent once per newly completed live bar
+- Bootstrap is bounded by the chart's configured 65-bar history; do not configure an unbounded historical range
+- After bootstrap, `LastBarOnChart` and `BarStatus(1) = 2` send once per newly completed live bar
 - The `External` path must point to the compiled `BarBridge.dll`, not the `.cpp` source
-- `SendBar()` connects to `127.0.0.1:9009` (your Python TCP server must be running)
+- `SendBarMode()` connects to `127.0.0.1:9009` (your Python TCP server must be running)
 - The installed backup is `EL_files/g_cpp_dll_bar.els`
 - See [[how_to_compile_dll]] for the coordinated x86 DLL build

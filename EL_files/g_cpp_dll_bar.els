@@ -5,16 +5,26 @@ using elsystem;
 { DllPath is retained to match the saved TradeStation document. The External
   declaration below is the path actually used for the DLL call. }
 Inputs:
-    DllPath("C:\Users\g_med\python_new\GNET\EL_files\dll.cpp");
+    DllPath("C:\Users\g_med\python_new\GNET\EL_files\dll.cpp"),
+    BootstrapBars(60);
 
 Vars:
     yyyymmdd(0),
     bar_num(0),
     ok(0),
-    last_connection_state(-1),
+    IntrabarPersist last_connection_state(-1),
+    IntrabarPersist bootstrap_done(false),
+    bootstrap_send_ok(true),
+    available_bootstrap_bars(0),
+    history_offset(0),
+    send_mode(0),
+    IntrabarPersist last_live_bar_sent(-1),
+    bar_vwap(0),
+    DateTime historical_datetime(null),
     TimeSpan hhmmss(null);
 
-External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBar",
+External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBarMode",
+    int,        { mode: 0 live, 1 bootstrap, 2 bootstrap end }
     Lpstr,      { symbol }
     int,        { yyyymmdd }
     int,        { hhmmss }
@@ -27,13 +37,81 @@ External: "C:\Users\g_med\python_new\GNET\EL_files\BarBridge.dll", int, "SendBar
     double,     { vwap }
     int;        { bar_num }
 
-{ Send only the live chart's completed bar. Historical reloads must never
-  replay through the DLL. }
-If LastBarOnChart and BarStatus(1) = 2 Then Begin
+{ On initial calculation or Ctrl+R, explicitly replay the preceding completed
+  chart bars. Do not depend on TradeStation invoking the DLL once for every
+  historical calculation. The current, still-forming bar is excluded. }
+{ Capture the non-indexable TradeStation VWAP value into an EL series. }
+bar_vwap = VWAP;
+
+If LastBarOnChart and not bootstrap_done Then Begin
+    available_bootstrap_bars = MinList(
+        BootstrapBars,
+        CurrentBar + MaxBarsBack - 1
+    );
+
+    If available_bootstrap_bars < BootstrapBars Then Begin
+        Print(Date, " ", Time,
+              " GNET bootstrap waiting: completed bars=",
+              available_bootstrap_bars:0:0,
+              " required=", BootstrapBars:0:0);
+    End
+    Else Begin
+        bootstrap_send_ok = true;
+
+        For history_offset = BootstrapBars DownTo 1 Begin
+            historical_datetime = BarDateTime[history_offset];
+            hhmmss = historical_datetime.TimeOfDay;
+
+            send_mode = 1;
+            If history_offset = 1 Then
+                send_mode = 2;
+
+            ok = SendBarMode(
+                send_mode,
+                Symbol,
+                Date[history_offset],
+                IntPortion(hhmmss.TotalSeconds),
+                Open[history_offset],
+                High[history_offset],
+                Low[history_offset],
+                Close[history_offset],
+                UpTicks[history_offset],
+                DownTicks[history_offset],
+                bar_vwap[history_offset],
+                CurrentBar + MaxBarsBack - history_offset
+            );
+
+            If ok <> 1 Then
+                bootstrap_send_ok = false;
+        End;
+
+        If bootstrap_send_ok Then Begin
+            bootstrap_done = true;
+            last_live_bar_sent = CurrentBar + MaxBarsBack - 1;
+            Print(Date, " ", Time,
+                  " GNET bootstrap completed with ",
+                  BootstrapBars:0:0, " completed bars");
+        End
+        Else
+            Print(Date, " ", Time,
+                  " GNET bootstrap failed; full replay will retry");
+
+        If ok <> last_connection_state Then Begin
+            If ok = 1 Then
+                Print(Time, " GNET bar bridge connected")
+            Else
+                Print(Time, " GNET bar bridge unavailable; retry is throttled");
+            last_connection_state = ok;
+        End;
+    End;
+End
+Else If LastBarOnChart and BarStatus(1) = 2 and
+        CurrentBar + MaxBarsBack <> last_live_bar_sent Then Begin
     yyyymmdd = Date;
     hhmmss = BarDateTime.TimeOfDay;
-    bar_num = CurrentBar;
-    ok = SendBar(
+    bar_num = CurrentBar + MaxBarsBack;
+    ok = SendBarMode(
+        0,
         Symbol,
         yyyymmdd,
         IntPortion(hhmmss.TotalSeconds),
@@ -46,6 +124,8 @@ If LastBarOnChart and BarStatus(1) = 2 Then Begin
         VWAP,
         bar_num
     );
+    If ok = 1 Then
+        last_live_bar_sent = bar_num;
 
     If ok <> last_connection_state Then Begin
         If ok = 1 Then

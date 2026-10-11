@@ -1,0 +1,6 @@
+{
+  "name": "gnet-command-center-browser-tests",
+  "private": true,
+  "scripts": {"test": "playwright test", "report": "playwright show-report"},
+  "devDependencies": {"playwright": "1.62.1"}
+}

@@ -48,6 +48,9 @@ SCHEMA = pa.schema(
 )
 DEFAULT_RAW_ROOT = Path("historical_vp") / "raw"
 DEFAULT_EXPORT_PATTERN = re.compile(r"^volumeprof([1-9][0-9]*)\.txt$")
+DATED_EXPORT_PATTERN = re.compile(
+    r"^volumeprof_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})\.txt$"
+)
 
 
 class HistoricalVPError(ValueError):
@@ -98,19 +101,35 @@ def _parse_fixed_time(value: str) -> time:
 
 
 def discover_default_inputs(raw_root: Path = DEFAULT_RAW_ROOT) -> list[Path]:
-    """Return volumeprof<number>.txt exports in natural numeric order."""
-    matches: list[tuple[int, Path]] = []
+    """Return legacy numbered exports, then dated exports in date order."""
+    numbered: list[tuple[int, Path]] = []
+    dated: list[tuple[date, date, Path]] = []
     if raw_root.is_dir():
         for path in raw_root.iterdir():
-            match = DEFAULT_EXPORT_PATTERN.fullmatch(path.name)
-            if path.is_file() and match is not None:
-                matches.append((int(match.group(1)), path))
-    if not matches:
+            if not path.is_file():
+                continue
+            numbered_match = DEFAULT_EXPORT_PATTERN.fullmatch(path.name)
+            if numbered_match is not None:
+                numbered.append((int(numbered_match.group(1)), path))
+                continue
+            dated_match = DATED_EXPORT_PATTERN.fullmatch(path.name)
+            if dated_match is not None:
+                try:
+                    first = date.fromisoformat(dated_match.group(1))
+                    last = date.fromisoformat(dated_match.group(2))
+                except ValueError as exc:
+                    raise HistoricalVPError(f"invalid dated export filename: {path.name}") from exc
+                if first > last:
+                    raise HistoricalVPError(f"reversed date range in export filename: {path.name}")
+                dated.append((first, last, path))
+    if not numbered and not dated:
         raise HistoricalVPError(
-            f"no inputs found matching volumeprof<number>.txt in {raw_root}"
+            "no inputs found matching volumeprof<number>.txt or "
+            f"volumeprof_YYYY-MM-DD_to_YYYY-MM-DD.txt in {raw_root}"
         )
-    matches.sort(key=lambda item: item[0])
-    return [path for _, path in matches]
+    numbered.sort(key=lambda item: item[0])
+    dated.sort(key=lambda item: (item[0], item[1], item[2].name))
+    return [path for _, path in numbered] + [path for _, _, path in dated]
 
 
 def _parse_row(row: dict[str, str], source: Path, row_number: int) -> dict:
@@ -644,7 +663,8 @@ def main() -> None:
         type=Path,
         help=(
             "Optional input paths. When omitted, all files matching "
-            "historical_vp/raw/volumeprof<number>.txt are discovered."
+            "historical_vp/raw/volumeprof<number>.txt and "
+            "volumeprof_YYYY-MM-DD_to_YYYY-MM-DD.txt are discovered."
         ),
     )
     parser.add_argument(

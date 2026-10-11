@@ -32,5 +32,7 @@ REPORTS_DIR   = _resolve("REPORTS_DIR",   _STRATEGY_DIR / "reports")
 # ── Derived file paths ────────────────────────────────────────────────────────
 TRADES_FILE   = INPUTS_DIR    / os.getenv("TRADES_FILE", "trades_30.csv")
 BARS_FILE     = INPUTS_DIR    / os.getenv("BARS_FILE",   "data_30.txt")
-FEATURES_FILE = PROCESSED_DIR / "df_features_labeled.csv"
+FEATURES_FILE = _resolve(
+    "FEATURES_FILE", PROCESSED_DIR / "df_features_labeled.csv"
+)
 ENRICHED_FILE = PROCESSED_DIR / "df_enriched.csv"

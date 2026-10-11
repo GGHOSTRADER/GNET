@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "datasets": [
+    {
+      "id": "es_spliced_20260921",
+      "asset": "ES",
+      "symbol": "@ES",
+      "timezone": "America/New_York",
+      "root": "../historical_vp/prepared_spliced_2026_09_21",
+      "status": "selected_research_source",
+      "notes": "Old vintage through August 14; new vintage from August 17. No price adjustment. Reset strategy/feature state at handoff. Latest session may be partial."
+    },
+    {
+      "id": "es_old",
+      "asset": "ES",
+      "symbol": "@ES",
+      "timezone": "America/New_York",
+      "root": "../historical_vp/prepared",
+      "status": "source_archive",
+      "notes": "Older continuous-contract export vintage. Overlaps the new archive; retain unchanged."
+    },
+    {
+      "id": "es_new_20260921",
+      "asset": "ES",
+      "symbol": "@ES",
+      "timezone": "America/New_York",
+      "root": "../historical_vp/prepared_new_2026_09_21",
+      "status": "source_archive",
+      "notes": "Newer continuous-contract price basis. Contains overlapping August 13-14 sessions; last session is partial."
+    },
+    {
+      "id": "es_adjusted_20260921",
+      "asset": "ES",
+      "symbol": "@ES",
+      "timezone": "America/New_York",
+      "root": "../historical_vp/prepared_continuous_2026_09_21",
+      "status": "audit_only",
+      "notes": "Alternative adjusted-price experiment: older prices increased 67.75 points. Not the selected research input; not independent additional data."
+    }
+  ]
+}

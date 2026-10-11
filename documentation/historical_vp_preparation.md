@@ -1,18 +1,18 @@
 # Historical Volume-Profile Preparation
 
-The raw TradeStation exports remain unchanged under the dedicated raw-data
-directory and are ignored by Git:
+The raw TradeStation export contents remain unchanged under the dedicated
+raw-data directory; the files now have date-range names and are ignored by Git:
 
 ```text
-historical_vp/raw/volumeprof1.txt
-historical_vp/raw/volumeprof2.txt
-historical_vp/raw/volumeprof3.txt
-historical_vp/raw/volumeprof4.txt
-historical_vp/raw/volumeprof5.txt
+historical_vp/raw/volumeprof_2026-03-15_to_2026-04-15.txt
+historical_vp/raw/volumeprof_2026-04-15_to_2026-05-15.txt
+historical_vp/raw/volumeprof_2026-05-17_to_2026-06-15.txt
+historical_vp/raw/volumeprof_2026-06-15_to_2026-07-15.txt
+historical_vp/raw/volumeprof_2026-07-15_to_2026-08-14.txt
 ```
 
 From the repository root, prepare every available
-`historical_vp/raw/volumeprof<number>.txt` input with:
+`historical_vp/raw/volumeprof_YYYY-MM-DD_to_YYYY-MM-DD.txt` input with:
 
 ```powershell
 python -m training_mlp.prepare_historical_vp --symbol "@ES"

@@ -1,0 +1,688 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-22T00:01:54.531856-04:00",
+  "symbol": "@ES",
+  "source_timezone": "America/New_York",
+  "session_start": "18:00:00",
+  "compression": "zstd",
+  "files": [
+    {
+      "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "size_bytes": 1405573095,
+      "rows": 24657227,
+      "zero_volume_rows": 0,
+      "first_timestamp": "2026-08-12 18:00:00",
+      "last_timestamp": "2026-09-21 23:26:21",
+      "sessions": 29
+    }
+  ],
+  "partitions": [
+    {
+      "session_date": "2026-08-13",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 725276,
+      "owner_sha256": "fcba165096c141d4ea0fcdcf473898ab0d02a2a662c30879d457be170caa0606",
+      "owner_parquet_bytes": 1753284,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-13",
+          "rows": 725276,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-12 18:00:00",
+          "last_timestamp": "2026-08-13 16:59:59",
+          "sha256": "fcba165096c141d4ea0fcdcf473898ab0d02a2a662c30879d457be170caa0606",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-13\\ticks.parquet",
+          "parquet_bytes": 1753284
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-14",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 618514,
+      "owner_sha256": "ddfccf245d28344b5e250fa961ef6925348b44d6d17f211999e079e988a05aa7",
+      "owner_parquet_bytes": 1475754,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-14",
+          "rows": 618514,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-13 18:00:00",
+          "last_timestamp": "2026-08-14 16:59:59",
+          "sha256": "ddfccf245d28344b5e250fa961ef6925348b44d6d17f211999e079e988a05aa7",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-14\\ticks.parquet",
+          "parquet_bytes": 1475754
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-17",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 657277,
+      "owner_sha256": "3de9da38794687276e41bee472af59e503ec0a8d2f138aa6410ca97a90bba060",
+      "owner_parquet_bytes": 1528984,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-17",
+          "rows": 657277,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-16 18:00:00",
+          "last_timestamp": "2026-08-17 16:59:58",
+          "sha256": "3de9da38794687276e41bee472af59e503ec0a8d2f138aa6410ca97a90bba060",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-17\\ticks.parquet",
+          "parquet_bytes": 1528984
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-18",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 899008,
+      "owner_sha256": "0dd422805d4a3b4a6e3c9e94408a3c4ddb0bbb8495951fd4ed6e2fc448f0bd7a",
+      "owner_parquet_bytes": 2087032,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-18",
+          "rows": 899008,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-17 18:00:00",
+          "last_timestamp": "2026-08-18 16:59:59",
+          "sha256": "0dd422805d4a3b4a6e3c9e94408a3c4ddb0bbb8495951fd4ed6e2fc448f0bd7a",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-18\\ticks.parquet",
+          "parquet_bytes": 2087032
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-19",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1039791,
+      "owner_sha256": "343fd60565eda44a099d4e2773eed3a49ad0bc697d2c17374149cad70409e747",
+      "owner_parquet_bytes": 2313769,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-19",
+          "rows": 1039791,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-18 18:00:00",
+          "last_timestamp": "2026-08-19 16:59:58",
+          "sha256": "343fd60565eda44a099d4e2773eed3a49ad0bc697d2c17374149cad70409e747",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-19\\ticks.parquet",
+          "parquet_bytes": 2313769
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-20",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1055670,
+      "owner_sha256": "720894fee0c723345065701994984bde8a56aed0fdc453278cd6f721af474c1e",
+      "owner_parquet_bytes": 2465952,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-20",
+          "rows": 1055670,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-19 18:00:00",
+          "last_timestamp": "2026-08-20 16:59:59",
+          "sha256": "720894fee0c723345065701994984bde8a56aed0fdc453278cd6f721af474c1e",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-20\\ticks.parquet",
+          "parquet_bytes": 2465952
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-21",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 812295,
+      "owner_sha256": "41431832209c1c4bc7b0077aff6225dd9184cc33077ce97b5298fbc90208adf7",
+      "owner_parquet_bytes": 1933083,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-21",
+          "rows": 812295,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-20 18:00:00",
+          "last_timestamp": "2026-08-21 16:59:59",
+          "sha256": "41431832209c1c4bc7b0077aff6225dd9184cc33077ce97b5298fbc90208adf7",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-21\\ticks.parquet",
+          "parquet_bytes": 1933083
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-24",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 799979,
+      "owner_sha256": "cdab4041975b8d4fe274676090bf89c62ee09d082d780551ef905c38f89eb555",
+      "owner_parquet_bytes": 1934964,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-24",
+          "rows": 799979,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-23 18:00:00",
+          "last_timestamp": "2026-08-24 16:59:58",
+          "sha256": "cdab4041975b8d4fe274676090bf89c62ee09d082d780551ef905c38f89eb555",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-24\\ticks.parquet",
+          "parquet_bytes": 1934964
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-25",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 725061,
+      "owner_sha256": "2801fb2b64d7d85de08cc210e5fa2cb046929a9aee801213535e2ff71389be54",
+      "owner_parquet_bytes": 1694840,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-25",
+          "rows": 725061,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-24 18:00:00",
+          "last_timestamp": "2026-08-25 16:59:59",
+          "sha256": "2801fb2b64d7d85de08cc210e5fa2cb046929a9aee801213535e2ff71389be54",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-25\\ticks.parquet",
+          "parquet_bytes": 1694840
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-26",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 763554,
+      "owner_sha256": "2e613e16783f80b4c4e1b54714245e0cd162a58694e0e4fe1208152862fd9ad7",
+      "owner_parquet_bytes": 1840049,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-26",
+          "rows": 763554,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-25 18:00:00",
+          "last_timestamp": "2026-08-26 16:59:59",
+          "sha256": "2e613e16783f80b4c4e1b54714245e0cd162a58694e0e4fe1208152862fd9ad7",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-26\\ticks.parquet",
+          "parquet_bytes": 1840049
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-27",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 943025,
+      "owner_sha256": "3318021e7570f79bba41112700fdff182c827f514a694d778df893b1685a065a",
+      "owner_parquet_bytes": 2204986,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-27",
+          "rows": 943025,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-26 18:00:00",
+          "last_timestamp": "2026-08-27 16:59:59",
+          "sha256": "3318021e7570f79bba41112700fdff182c827f514a694d778df893b1685a065a",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-27\\ticks.parquet",
+          "parquet_bytes": 2204986
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-28",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1073445,
+      "owner_sha256": "2f583c0360966953060d5497f5d9a59bb35bf78ef1439a00b0c568fabd95b502",
+      "owner_parquet_bytes": 2427942,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-28",
+          "rows": 1073445,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-27 18:00:00",
+          "last_timestamp": "2026-08-28 16:59:59",
+          "sha256": "2f583c0360966953060d5497f5d9a59bb35bf78ef1439a00b0c568fabd95b502",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-28\\ticks.parquet",
+          "parquet_bytes": 2427942
+        }
+      ]
+    },
+    {
+      "session_date": "2026-08-31",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 827225,
+      "owner_sha256": "51533356ada1849f2fbc9d1f7876999df7412ec779cfc1bc5e36933aade372a7",
+      "owner_parquet_bytes": 1990416,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-08-31",
+          "rows": 827225,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-30 18:00:00",
+          "last_timestamp": "2026-08-31 16:59:59",
+          "sha256": "51533356ada1849f2fbc9d1f7876999df7412ec779cfc1bc5e36933aade372a7",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-08-31\\ticks.parquet",
+          "parquet_bytes": 1990416
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-01",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1145465,
+      "owner_sha256": "8625cec86d808bd9a7440fec18402651194ce83c5903c36be68613882a1373bd",
+      "owner_parquet_bytes": 2626058,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-01",
+          "rows": 1145465,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-08-31 18:00:00",
+          "last_timestamp": "2026-09-01 16:59:58",
+          "sha256": "8625cec86d808bd9a7440fec18402651194ce83c5903c36be68613882a1373bd",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-01\\ticks.parquet",
+          "parquet_bytes": 2626058
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-02",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 939696,
+      "owner_sha256": "9a6dda6e146630ff8397de4aeab0eec9430c9cda9b41bfa9b8985fa6156584e3",
+      "owner_parquet_bytes": 2176139,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-02",
+          "rows": 939696,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-01 18:00:00",
+          "last_timestamp": "2026-09-02 16:59:59",
+          "sha256": "9a6dda6e146630ff8397de4aeab0eec9430c9cda9b41bfa9b8985fa6156584e3",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-02\\ticks.parquet",
+          "parquet_bytes": 2176139
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-03",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1013559,
+      "owner_sha256": "00354f73b06281fd660089f411f34deec51174cc70e6b9fcd6b93b3016f7d7fe",
+      "owner_parquet_bytes": 2360493,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-03",
+          "rows": 1013559,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-02 18:00:00",
+          "last_timestamp": "2026-09-03 16:59:58",
+          "sha256": "00354f73b06281fd660089f411f34deec51174cc70e6b9fcd6b93b3016f7d7fe",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-03\\ticks.parquet",
+          "parquet_bytes": 2360493
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-04",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 878453,
+      "owner_sha256": "4e671914944e8b78e5b8577302023ee01505f1abe97130b9e29eac44e153450c",
+      "owner_parquet_bytes": 2048868,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-04",
+          "rows": 878453,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-03 18:00:00",
+          "last_timestamp": "2026-09-04 16:59:59",
+          "sha256": "4e671914944e8b78e5b8577302023ee01505f1abe97130b9e29eac44e153450c",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-04\\ticks.parquet",
+          "parquet_bytes": 2048868
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-07",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 119837,
+      "owner_sha256": "690c13e44fb3e778306999c07e3b1877efdb653bce949881532fcbde61e04358",
+      "owner_parquet_bytes": 364667,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-07",
+          "rows": 119837,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-06 18:00:00",
+          "last_timestamp": "2026-09-07 12:59:59",
+          "sha256": "690c13e44fb3e778306999c07e3b1877efdb653bce949881532fcbde61e04358",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-07\\ticks.parquet",
+          "parquet_bytes": 364667
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-08",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 991097,
+      "owner_sha256": "6d9cf2464cab812337762849a4d364c551806bbd52882393d47b73ea4c9cdcd9",
+      "owner_parquet_bytes": 2308353,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-08",
+          "rows": 991097,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-07 18:00:00",
+          "last_timestamp": "2026-09-08 16:59:57",
+          "sha256": "6d9cf2464cab812337762849a4d364c551806bbd52882393d47b73ea4c9cdcd9",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-08\\ticks.parquet",
+          "parquet_bytes": 2308353
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-09",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1019214,
+      "owner_sha256": "443906f0469cc69396f1366531b1bb2b287a376c7e34b7d85b249af213ed70f4",
+      "owner_parquet_bytes": 2320011,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-09",
+          "rows": 1019214,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-08 18:00:00",
+          "last_timestamp": "2026-09-09 16:59:57",
+          "sha256": "443906f0469cc69396f1366531b1bb2b287a376c7e34b7d85b249af213ed70f4",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-09\\ticks.parquet",
+          "parquet_bytes": 2320011
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-10",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1170786,
+      "owner_sha256": "bfd3e2db3ee94ba3cde63f765e417b269cef6e0f7eaafd2d1258d077a7102c72",
+      "owner_parquet_bytes": 2706657,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-10",
+          "rows": 1170786,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-09 18:00:00",
+          "last_timestamp": "2026-09-10 16:59:58",
+          "sha256": "bfd3e2db3ee94ba3cde63f765e417b269cef6e0f7eaafd2d1258d077a7102c72",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-10\\ticks.parquet",
+          "parquet_bytes": 2706657
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-11",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1091946,
+      "owner_sha256": "1686526622d2db556b1458e7519ca6bff36b90967a89db03d6ee81bf12ab4619",
+      "owner_parquet_bytes": 2574433,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-11",
+          "rows": 1091946,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-10 18:00:00",
+          "last_timestamp": "2026-09-11 16:59:59",
+          "sha256": "1686526622d2db556b1458e7519ca6bff36b90967a89db03d6ee81bf12ab4619",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-11\\ticks.parquet",
+          "parquet_bytes": 2574433
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-14",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 641788,
+      "owner_sha256": "4a0fdfaaa26775b56ec261ac55d2f5c0168d462031ad79d424db7958333984e3",
+      "owner_parquet_bytes": 1601390,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-14",
+          "rows": 641788,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-13 18:00:00",
+          "last_timestamp": "2026-09-14 16:59:58",
+          "sha256": "4a0fdfaaa26775b56ec261ac55d2f5c0168d462031ad79d424db7958333984e3",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-14\\ticks.parquet",
+          "parquet_bytes": 1601390
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-15",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 837519,
+      "owner_sha256": "f2e6589201dd04163406d3e7f9c57eb9706f898a5e7e368f51f40998f2f93c5d",
+      "owner_parquet_bytes": 2012313,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-15",
+          "rows": 837519,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-14 18:00:00",
+          "last_timestamp": "2026-09-15 16:59:58",
+          "sha256": "f2e6589201dd04163406d3e7f9c57eb9706f898a5e7e368f51f40998f2f93c5d",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-15\\ticks.parquet",
+          "parquet_bytes": 2012313
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-16",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 1100538,
+      "owner_sha256": "9ffb54d351f8f9dd27926421985866a37ba3018afd167cf498593cf82fabd20e",
+      "owner_parquet_bytes": 2558365,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-16",
+          "rows": 1100538,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-15 18:00:00",
+          "last_timestamp": "2026-09-16 16:59:59",
+          "sha256": "9ffb54d351f8f9dd27926421985866a37ba3018afd167cf498593cf82fabd20e",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-16\\ticks.parquet",
+          "parquet_bytes": 2558365
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-17",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 930802,
+      "owner_sha256": "8d671c809ccc8723ff4ba13f5ead811991d1a501a0242eef69ed5b07a0133bbe",
+      "owner_parquet_bytes": 2199176,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-17",
+          "rows": 930802,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-16 18:00:00",
+          "last_timestamp": "2026-09-17 16:59:59",
+          "sha256": "8d671c809ccc8723ff4ba13f5ead811991d1a501a0242eef69ed5b07a0133bbe",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-17\\ticks.parquet",
+          "parquet_bytes": 2199176
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-18",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 922758,
+      "owner_sha256": "b17cec49417937fb26f8841d54b0ca494349a9bb25a33ea4dd86649cfadfe83b",
+      "owner_parquet_bytes": 2173736,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-18",
+          "rows": 922758,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-17 18:00:00",
+          "last_timestamp": "2026-09-18 16:59:58",
+          "sha256": "b17cec49417937fb26f8841d54b0ca494349a9bb25a33ea4dd86649cfadfe83b",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-18\\ticks.parquet",
+          "parquet_bytes": 2173736
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-21",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 880525,
+      "owner_sha256": "aee572804d4f1507f69b281220b7960dc8a79ffb2ede55581644dd622db8b18c",
+      "owner_parquet_bytes": 2055505,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-21",
+          "rows": 880525,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-20 18:00:00",
+          "last_timestamp": "2026-09-21 16:59:59",
+          "sha256": "aee572804d4f1507f69b281220b7960dc8a79ffb2ede55581644dd622db8b18c",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-21\\ticks.parquet",
+          "parquet_bytes": 2055505
+        }
+      ]
+    },
+    {
+      "session_date": "2026-09-22",
+      "owner": "volumeprof_2026-08-13_to_2026-09-21.txt",
+      "owner_rows": 33124,
+      "owner_sha256": "d86171d8bb5379ed90f61fd9a3131a9cd92e43f1444ecfc36aa9662af1c4cade",
+      "owner_parquet_bytes": 105487,
+      "reason": "only_source",
+      "overlap": false,
+      "identical_overlap": null,
+      "candidates": [
+        {
+          "source_file": "volumeprof_2026-08-13_to_2026-09-21.txt",
+          "session_date": "2026-09-22",
+          "rows": 33124,
+          "zero_volume_rows": 0,
+          "first_timestamp": "2026-09-21 18:00:00",
+          "last_timestamp": "2026-09-21 23:26:21",
+          "sha256": "d86171d8bb5379ed90f61fd9a3131a9cd92e43f1444ecfc36aa9662af1c4cade",
+          "staged_path": "C:\\Users\\g_med\\python_new\\GNET\\historical_vp\\prepared_new_2026_09_21\\.staging\\volumeprof_2026-08-13_to_2026-09-21\\session_date=2026-09-22\\ticks.parquet",
+          "parquet_bytes": 105487
+        }
+      ]
+    }
+  ]
+}

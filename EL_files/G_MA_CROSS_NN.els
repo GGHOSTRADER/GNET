@@ -4,6 +4,7 @@
 [IntrabarOrderGeneration = TRUE]
 
 using elsystem;
+using elsystem.drawingobjects;
 
 Inputs:
     FastPrice(Close),
@@ -13,8 +14,10 @@ Inputs:
     StrategyId("MA2CrossLE"),
     InstanceId("MA-ES-30S-01"),
     CandidateTimeoutBars(2),
-    ProfitTargetPoints(1.0),
-    StopLossPoints(1.0);
+    StopLossAmount(50),
+    ProfitTargetAmount(50),
+    ShowDecisionMarkers(true),
+    DecisionMarkerOffsetPoints(4.0);
 
 Variables:
     FastAvg(0),
@@ -32,6 +35,8 @@ Variables:
     IntrabarPersist decision_id(""),
     IntrabarPersist decision_status(""),
     IntrabarPersist pending_candidate(false),
+    TextLabel decision_label(null),
+    TrendLine decision_line(null),
     TimeSpan tod(null);
 
 External: "C:\Users\g_med\python_new\GNET\EL_files\StrategyBridge.dll",
@@ -64,6 +69,13 @@ External: "C:\Users\g_med\python_new\GNET\EL_files\SignalBridge.dll",
 
 FastAvg = AverageFC(FastPrice, FastLength);
 SlowAvg = AverageFC(SlowPrice, SlowLength);
+
+{ TradeStation built-in same-entry-bar protection. Amounts are dollars per
+  contract; for ES, $50 equals one full index point. These statements remain
+  active continuously and must not be replaced with explicit next-bar exits. }
+SetStopContract;
+SetStopLoss(StopLossAmount);
+SetProfitTarget(ProfitTargetAmount);
 
 { A lost decision must not block every later primary signal forever. }
 If pending_candidate and
@@ -122,12 +134,89 @@ If LastBarOnChart Then Begin
             If decision_status = "ok" and approved = 1 Then Begin
                 Print(BarDateTime.ToString(), " GNET approved: candidate=", decision_id,
                       " probability=", probability:0:6);
+
+                { Mark the bar where EasyLanguage received the exact decision. }
+                If ShowDecisionMarkers Then Begin
+                    decision_line = TrendLine.Create(
+                        BNPoint.Create(CurrentBar + MaxBarsBack - 1, Low),
+                        BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                       Low - DecisionMarkerOffsetPoints)
+                    );
+                    decision_line.Persist = true;
+                    decision_line.ExtLeft = false;
+                    decision_line.ExtRight = false;
+                    decision_line.Color = elsystem.drawing.Color.Green;
+                    DrawingObjects.Add(decision_line);
+
+                    decision_label = TextLabel.Create(
+                        BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                       Low - DecisionMarkerOffsetPoints),
+                        "YES " + NumToStr(probability, 3)
+                    );
+                    decision_label.Persist = true;
+                    decision_label.Color = elsystem.drawing.Color.Green;
+                    decision_label.Font = elsystem.drawing.Font.Create("Arial", 10);
+                    DrawingObjects.Add(decision_label);
+                    Print(BarDateTime.ToString(), " GNET marker added type=approved");
+                End;
+
                 Buy ("MA2CrossLE-GNET") next bar at market;
             End
-            Else
+            Else Begin
                 Print(BarDateTime.ToString(), " GNET rejected: candidate=", decision_id,
                       " status=", decision_status,
                       " probability=", probability:0:6);
+
+                If ShowDecisionMarkers Then Begin
+                    If decision_status = "ok" Then Begin
+                        decision_line = TrendLine.Create(
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1, High),
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                           High + DecisionMarkerOffsetPoints)
+                        );
+                        decision_line.Persist = true;
+                        decision_line.ExtLeft = false;
+                        decision_line.ExtRight = false;
+                        decision_line.Color = elsystem.drawing.Color.Red;
+                        DrawingObjects.Add(decision_line);
+
+                        decision_label = TextLabel.Create(
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                           High + DecisionMarkerOffsetPoints),
+                            "NO " + NumToStr(probability, 3)
+                        );
+                        decision_label.Persist = true;
+                        decision_label.Color = elsystem.drawing.Color.Red;
+                        decision_label.Font = elsystem.drawing.Font.Create("Arial", 10);
+                        DrawingObjects.Add(decision_label);
+                        Print(BarDateTime.ToString(), " GNET marker added type=rejected");
+                    End
+                    Else Begin
+                        decision_line = TrendLine.Create(
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1, High),
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                           High + DecisionMarkerOffsetPoints)
+                        );
+                        decision_line.Persist = true;
+                        decision_line.ExtLeft = false;
+                        decision_line.ExtRight = false;
+                        decision_line.Color = elsystem.drawing.Color.Yellow;
+                        DrawingObjects.Add(decision_line);
+
+                        decision_label = TextLabel.Create(
+                            BNPoint.Create(CurrentBar + MaxBarsBack - 1,
+                                           High + DecisionMarkerOffsetPoints),
+                            "ERROR"
+                        );
+                        decision_label.Persist = true;
+                        decision_label.Color = elsystem.drawing.Color.Yellow;
+                        decision_label.Font = elsystem.drawing.Font.Create("Arial", 10);
+                        DrawingObjects.Add(decision_label);
+                        Print(BarDateTime.ToString(), " GNET marker added type=error status=",
+                              decision_status);
+                    End;
+                End;
+            End;
         End
         Else
             Print(BarDateTime.ToString(), " GNET ignored unmatched decision: expected=", candidate_id,
@@ -144,13 +233,4 @@ If LastBarOnChart Then Begin
         last_recv_state = -1
     Else
         last_recv_state = 0;
-End;
-
-{ Manage an approved long position using price-point distances from the
-  actual filled entry price. For ES, 1.0 point equals four 0.25 ticks. }
-If MarketPosition = 1 Then Begin
-    Sell ("MA2CrossLE-PT") next bar at
-        EntryPrice + ProfitTargetPoints limit;
-    Sell ("MA2CrossLE-SL") next bar at
-        EntryPrice - StopLossPoints stop;
 End;

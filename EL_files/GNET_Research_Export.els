@@ -1,0 +1,378 @@
+{ GNET_Research_Export - INDICATOR, TradeStation 10.
+  Set MaxBarsBack manually to 1. Enable Update value intra-bar.
+  Prepare a NEW session with scripts.guarded_ts_export_session first.
+  Historical bars are emitted one bar late, preserving same-second order.
+  First real-time calculation closes the historical snapshot; no live rows.
+  An offline/expired chart remains partial. Never finalize via LastBarOnChartEx.
+  Platform Verify/acceptance are still required; this is not a broker installer.
+}
+
+using elsystem;
+using elsystem.io;
+using charting;
+
+Inputs:
+    ExportFolder(""),
+    ExportEnabled(false),
+    ChartTimeZone("unknown"),
+    VolumeMode("unknown"),
+    PriceBasis("unknown"),
+    DebugPrint(false);
+
+Vars:
+    StreamReader ReservationReader(null),
+    StreamWriter ReservationWriter(null),
+    StreamWriter BarWriter(null),
+    StreamWriter MetadataWriter(null),
+    StreamWriter CompletionWriter(null),
+    ChartingHost ExportHost(null),
+    DataStream ExportStream(null),
+    intrabarpersist ExportStarted(false),
+    intrabarpersist ExportFinished(false),
+    intrabarpersist RowCount(0),
+    intrabarpersist LastWrittenCurrentBar(0),
+    intrabarpersist EvidenceHits(0),
+    CapturedSymbol(""),
+    CapturedSession(""),
+    CapturedRegularSessions(false),
+    CapturedNaturalHours(false),
+    CapturedBarType(0),
+    CapturedInterval(0),
+    CapturedIntervalType(0),
+    CapturedTimeZone(-1),
+    CapturedMinMove(0),
+    CapturedPriceScale(0),
+    CurrentTimeZone(-1),
+    ClockModeName("unknown"),
+    ResolvedKind("unknown"),
+    ResolvedTimeBasis("unknown"),
+    DeclaredVolume("unknown"),
+    DeclaredBasis("unknown"),
+    EffectiveVolume("unknown"),
+    EffectiveVolumeSource("unknown"),
+    SessionId(""),
+    SessionPath(""),
+    ExportFile(""),
+    intrabarpersist FirstLoadedTime(""),
+    intrabarpersist LastHistoricalTime(""),
+    intrabarpersist FirstExportedTime(""),
+    intrabarpersist LastExportedTime(""),
+    RowTime(""),
+    LineText(""),
+    SchemaLine(""),
+    StatusLine(""),
+    WriterHash(""),
+    ReadExtra(""),
+    ScanIndex(0),
+    ScanChar(""),
+    RowVolume(0),
+    StringOpen(""),
+    StringHigh(""),
+    StringLow(""),
+    StringClose(""),
+    MetadataText(""),
+    CompletionText(""),
+    GeneratedTime(""),
+    RegularFlag("false"),
+    NaturalFlag("false");
+
+method string GnetJsonString(string RawText)
+Vars: int CharacterIndex, string CharacterText, string Escaped;
+Begin
+    Escaped = "";
+    For CharacterIndex = 1 To StrLen(RawText) Begin
+        CharacterText = MidStr(RawText, CharacterIndex, 1);
+        If CharacterText = "\" Then
+            Escaped = Escaped + "\\"
+        Else If CharacterText = DoubleQuote Then
+            Escaped = Escaped + "\" + DoubleQuote
+        Else If InStr(NewLine, CharacterText) > 0 Then
+            RaiseRunTimeError("GNET metadata text must not contain line breaks")
+        Else
+            Escaped = Escaped + CharacterText;
+    End;
+    Return DoubleQuote + Escaped + DoubleQuote;
+End;
+
+method void GnetCloseWriters()
+Begin
+    If BarWriter <> null Then Begin
+        BarWriter.Flush();
+        BarWriter.Close();
+        BarWriter = null;
+    End;
+    If MetadataWriter <> null Then Begin
+        MetadataWriter.Close();
+        MetadataWriter = null;
+    End;
+    If CompletionWriter <> null Then Begin
+        CompletionWriter.Close();
+        CompletionWriter = null;
+    End;
+End;
+
+method void GnetUninitialized(Object Sender, UnInitializedEventArgs Args)
+Begin
+    { Cleanup does not certify that historical calculation finished. }
+    GnetCloseWriters();
+End;
+
+Once Begin
+    If GetAppInfo(aiApplicationType) <> 1 Then
+        RaiseRunTimeError("GNET exporter requires a Chart Analysis window");
+    If MaxBarsBack <> 1 Then
+        RaiseRunTimeError("Set GNET_Research_Export MaxBarsBack manually to 1");
+    ExportHost = ChartingHost.Create();
+    If ExportHost.DataStreams.Count <> 1 Then
+        RaiseRunTimeError("GNET exporter requires exactly one chart data stream");
+    ExportStream = ExportHost.DataStreams.Stream[0];
+    If ExportStream.DataNum <> 0 Or ExportStream.SymbolName <> GetSymbolName Then
+        RaiseRunTimeError("GNET exporter must reference the chart Data1 symbol");
+
+    CapturedSymbol = GetSymbolName;
+    CapturedBarType = BarType;
+    CapturedInterval = BarInterval;
+    CapturedIntervalType = IntervalType;
+    CapturedMinMove = MinMove;
+    CapturedPriceScale = PriceScale;
+    CapturedSession = ExportStream.SessionName;
+    CapturedRegularSessions = ExportStream.UsesRegularSessions;
+    CapturedNaturalHours = ExportStream.UsesNaturalHours;
+    If CapturedInterval < 1 Or CapturedInterval <> IntPortion(CapturedInterval) Then
+        RaiseRunTimeError("GNET requires a positive integer chart interval");
+
+    If CapturedBarType = 0 And CapturedIntervalType = 0 Then
+        ResolvedKind = "ticks"
+    Else If CapturedBarType = 14 And CapturedIntervalType = 14 Then
+        ResolvedKind = "seconds"
+    Else If CapturedBarType = 1 And CapturedIntervalType = 1 Then
+        ResolvedKind = "minutes"
+    Else
+        RaiseRunTimeError("Supported charts: tick, second and intraday minute only");
+    ResolvedTimeBasis = "bar_close";
+    If ResolvedKind = "ticks" And CapturedInterval = 1 Then
+        ResolvedTimeBasis = "event";
+
+    If ExportStream.TimeZone = elsystem.TimeZone.Local Then Begin
+        CapturedTimeZone = 0;
+        ClockModeName = "Local";
+    End
+    Else If ExportStream.TimeZone = elsystem.TimeZone.Exchange Then Begin
+        CapturedTimeZone = 1;
+        ClockModeName = "Exchange";
+    End
+    Else If ExportStream.TimeZone = elsystem.TimeZone.GMT Then Begin
+        CapturedTimeZone = 2;
+        ClockModeName = "GMT";
+    End
+    Else
+        RaiseRunTimeError("Unsupported attached chart clock mode");
+
+    DeclaredVolume = LowerStr(VolumeMode);
+    DeclaredBasis = LowerStr(PriceBasis);
+    If DeclaredVolume <> "unknown" And DeclaredVolume <> "trade_volume" And DeclaredVolume <> "tick_count" Then
+        RaiseRunTimeError("VolumeMode: trade_volume, tick_count or unknown");
+    If DeclaredBasis <> "unknown" And DeclaredBasis <> "unadjusted" And DeclaredBasis <> "adjusted" Then
+        RaiseRunTimeError("PriceBasis: unadjusted, adjusted or unknown");
+    If StrLen(ChartTimeZone) < 1 Or StrLen(ChartTimeZone) > 64 Then
+        RaiseRunTimeError("ChartTimeZone must be an IANA clock or unknown");
+
+    If ExportEnabled Then Begin
+        If StrLen(ExportFolder) < 3 Or StrLen(ExportFolder) > 190 Then
+            RaiseRunTimeError("ExportFolder must be a prepared session directory");
+        SessionPath = ExportFolder;
+        If RightStr(SessionPath, 1) <> "\" Then
+            SessionPath = SessionPath + "\";
+        { Read only the small preparation record, never existing market files. }
+        ReservationReader = StreamReader.Create(SessionPath + "reservation.txt");
+        SchemaLine = ReservationReader.ReadLine();
+        SessionId = ReservationReader.ReadLine();
+        StatusLine = ReservationReader.ReadLine();
+        WriterHash = ReservationReader.ReadLine();
+        If Not ReservationReader.EndOfStream Then Begin
+            ReservationReader.Close();
+            RaiseRunTimeError("Unexpected export reservation fields");
+        End;
+        ReservationReader.Close();
+        ReservationReader = null;
+        If SchemaLine <> "GNET_TS_EXPORT_SESSION=1" Or StatusLine <> "prepared" Then
+            RaiseRunTimeError("Session already used: prepare a NEW export folder");
+        If StrLen(SessionId) < 1 Or StrLen(SessionId) > 80 Or StrLen(WriterHash) <> 64 Then
+            RaiseRunTimeError("Invalid export session identity");
+        For ScanIndex = 1 To StrLen(SessionId) Begin
+            ScanChar = MidStr(SessionId, ScanIndex, 1);
+            If InStr("abcdefghijklmnopqrstuvwxyz0123456789-_", ScanChar) = 0 Then
+                RaiseRunTimeError("Invalid export session token");
+        End;
+        { Claim BEFORE opening bars. Recalculation fails instead of truncating. }
+        ReservationWriter = StreamWriter.Create(SessionPath + "reservation.txt", false);
+        ReservationWriter.WriteLine(SchemaLine);
+        ReservationWriter.WriteLine(SessionId);
+        ReservationWriter.WriteLine("claimed");
+        ReservationWriter.WriteLine(WriterHash);
+        ReservationWriter.Flush();
+        ReservationWriter.Close();
+        ReservationWriter = null;
+
+        ExportFile = SessionPath + "bars.csv";
+        FirstLoadedTime = BarDateTime[1].Format("%Y-%m-%dT%H:%M:%S");
+        BarWriter = StreamWriter.Create(ExportFile + ".partial", false);
+        BarWriter.WriteLine("RowSequence,SourceBarNumber,Timestamp,Open,High,Low,Close,Up,Down");
+        BarWriter.Flush();
+        this.Uninitialized += GnetUninitialized;
+        ExportStarted = true;
+    End;
+End;
+
+If ExportStarted And Not ExportFinished Then Begin
+    CurrentTimeZone = -1;
+    If ExportStream.TimeZone = elsystem.TimeZone.Local Then CurrentTimeZone = 0;
+    If ExportStream.TimeZone = elsystem.TimeZone.Exchange Then CurrentTimeZone = 1;
+    If ExportStream.TimeZone = elsystem.TimeZone.GMT Then CurrentTimeZone = 2;
+    If GetSymbolName <> CapturedSymbol Or BarType <> CapturedBarType
+       Or BarInterval <> CapturedInterval Or IntervalType <> CapturedIntervalType
+       Or CurrentTimeZone <> CapturedTimeZone Or MinMove <> CapturedMinMove
+       Or PriceScale <> CapturedPriceScale Or ExportStream.SessionName <> CapturedSession
+       Or ExportStream.UsesRegularSessions <> CapturedRegularSessions
+       Or ExportStream.UsesNaturalHours <> CapturedNaturalHours Then Begin
+        GnetCloseWriters();
+        RaiseRunTimeError("Chart settings changed: restart with a NEW session");
+    End;
+
+    If GetAppInfo(aiRealTimeCalc) = 0 Then Begin
+        LastHistoricalTime = BarDateTime.Format("%Y-%m-%dT%H:%M:%S");
+        If CurrentBar <> LastWrittenCurrentBar Then Begin
+            If RowCount >= 1000000 Then Begin
+                GnetCloseWriters();
+                RaiseRunTimeError("Export exceeds one million rows; split the source");
+            End;
+            If CurrentBar <> LastWrittenCurrentBar + 1 Then Begin
+                GnetCloseWriters();
+                RaiseRunTimeError("Non-sequential source chart bar");
+            End;
+            RowTime = BarDateTime[1].Format("%Y-%m-%dT%H:%M:%S");
+            RowVolume = UpTicks[1] + DownTicks[1];
+            If UpTicks[1] < 0 Or DownTicks[1] < 0
+               Or UpTicks[1] <> IntPortion(UpTicks[1])
+               Or DownTicks[1] <> IntPortion(DownTicks[1]) Then Begin
+                GnetCloseWriters();
+                RaiseRunTimeError("Directional volume must be nonnegative integers");
+            End;
+            If CapturedBarType = 0 And CapturedInterval = 1 And RowVolume > 1 Then
+                EvidenceHits = MinList(2, EvidenceHits + 1);
+            If DeclaredVolume = "tick_count" And EvidenceHits >= 2 Then Begin
+                GnetCloseWriters();
+                RaiseRunTimeError("Tick Count conflicts with one-tick trade-volume evidence");
+            End;
+
+            StringOpen = NumToStr(Open[1], 8);
+            StringHigh = NumToStr(High[1], 8);
+            StringLow = NumToStr(Low[1], 8);
+            StringClose = NumToStr(Close[1], 8);
+            If StrToNum(StringOpen) <> Open[1] Or StrToNum(StringHigh) <> High[1]
+               Or StrToNum(StringLow) <> Low[1] Or StrToNum(StringClose) <> Close[1]
+               Or InStr(StringOpen + StringHigh + StringLow + StringClose, ",") > 0 Then Begin
+                GnetCloseWriters();
+                RaiseRunTimeError("Price formatting must preserve values and decimal points");
+            End;
+            RowCount = RowCount + 1;
+            LastWrittenCurrentBar = CurrentBar;
+            If RowCount = 1 Then FirstExportedTime = RowTime;
+            LastExportedTime = RowTime;
+            LineText = NumToStr(RowCount, 0) + "," + NumToStr(CurrentBar, 0) + "," + RowTime
+                + "," + StringOpen + "," + StringHigh + "," + StringLow + "," + StringClose
+                + "," + NumToStr(UpTicks[1], 0) + "," + NumToStr(DownTicks[1], 0);
+            BarWriter.WriteLine(LineText);
+            If Mod(RowCount, 1000) = 0 Then BarWriter.Flush();
+        End;
+    End
+    Else Begin
+        { First real-time calculation follows the historical scan.
+          Do not append its previous bar: the terminal historical bar is excluded. }
+        If RowCount < 1 Then Begin
+            GnetCloseWriters();
+            RaiseRunTimeError("No historical bars exported");
+        End;
+        BarWriter.Flush();
+        BarWriter.Close();
+        BarWriter = null;
+        GeneratedTime = DateTime.Now.Format("%Y-%m-%dT%H:%M:%S");
+        MetadataText = "GNET_METADATA_BEGIN=1" + NewLine
+            + "export_file=" + ExportFile + NewLine
+            + "generated_at_local=" + GeneratedTime + NewLine
+            + "chart_symbol=" + CapturedSymbol + NewLine
+            + "chart_exchange=unknown" + NewLine
+            + "chart_timezone_mode=" + NumToStr(CapturedTimeZone, 0) + NewLine
+            + "chart_volume_gt_one_evidence=" + NumToStr(EvidenceHits, 0) + NewLine
+            + "chart_bar_type=" + NumToStr(CapturedBarType, 0) + NewLine
+            + "chart_bar_interval=" + NumToStr(CapturedInterval, 0) + NewLine
+            + "chart_range_start=" + FirstLoadedTime + NewLine
+            + "chart_range_end=" + LastHistoricalTime + NewLine
+            + "range_scope=loaded_chart" + NewLine
+            + "timestamp_precision=seconds" + NewLine
+            + "max_bars_back=1" + NewLine
+            + "declared_timezone=" + ChartTimeZone + NewLine
+            + "declared_volume_mode=" + DeclaredVolume + NewLine
+            + "declared_price_basis=" + DeclaredBasis + NewLine
+            + "declared_interval_kind=" + ResolvedKind + NewLine
+            + "declared_timestamp_convention=" + ResolvedTimeBasis + NewLine
+            + "export_file_verified=false" + NewLine
+            + "GNET_METADATA_END=1";
+        MetadataWriter = StreamWriter.Create(ExportFile + ".gnet-metadata.txt.partial", false);
+        MetadataWriter.WriteLine(MetadataText);
+        MetadataWriter.Flush();
+        MetadataWriter.Close();
+        MetadataWriter = null;
+        If CapturedRegularSessions Then RegularFlag = "true";
+        If CapturedNaturalHours Then NaturalFlag = "true";
+
+        CompletionText = "{" + DoubleQuote + "schema_version" + DoubleQuote + ":"
+            + GnetJsonString("gnet-ts-producer-complete-1") + ","
+            + DoubleQuote + "export_id" + DoubleQuote + ":" + GnetJsonString(SessionId) + ","
+            + DoubleQuote + "exporter_sha256" + DoubleQuote + ":" + GnetJsonString(WriterHash) + ","
+            + DoubleQuote + "completion_reason" + DoubleQuote + ":" + GnetJsonString("first_realtime_calculation") + ","
+            + DoubleQuote + "rows" + DoubleQuote + ":" + NumToStr(RowCount, 0) + ","
+            + DoubleQuote + "first_exported_time" + DoubleQuote + ":" + GnetJsonString(FirstExportedTime) + ","
+            + DoubleQuote + "last_exported_time" + DoubleQuote + ":" + GnetJsonString(LastExportedTime) + ","
+            + DoubleQuote + "loaded_range_start" + DoubleQuote + ":" + GnetJsonString(FirstLoadedTime) + ","
+            + DoubleQuote + "loaded_range_end" + DoubleQuote + ":" + GnetJsonString(LastHistoricalTime) + ","
+            + DoubleQuote + "interval_type_raw" + DoubleQuote + ":" + NumToStr(CapturedIntervalType, 0) + ","
+            + DoubleQuote + "session_name" + DoubleQuote + ":" + GnetJsonString(CapturedSession) + ","
+            + DoubleQuote + "uses_regular_sessions" + DoubleQuote + ":" + RegularFlag + ","
+            + DoubleQuote + "uses_natural_hours" + DoubleQuote + ":" + NaturalFlag + ","
+            + DoubleQuote + "min_move" + DoubleQuote + ":" + NumToStr(CapturedMinMove, 0) + ","
+            + DoubleQuote + "price_scale" + DoubleQuote + ":" + NumToStr(CapturedPriceScale, 0) + ","
+            + DoubleQuote + "excluded_terminal_bar_count" + DoubleQuote + ":1,"
+            + DoubleQuote + "producer_files_closed" + DoubleQuote + ":true,"
+            + DoubleQuote + "platform_completion_verified" + DoubleQuote + ":false,"
+            + DoubleQuote + "dataset_registered" + DoubleQuote + ":false}";
+        CompletionWriter = StreamWriter.Create(SessionPath + "producer-complete.json", false);
+        CompletionWriter.WriteLine(CompletionText);
+        CompletionWriter.Flush();
+        CompletionWriter.Close();
+        CompletionWriter = null;
+        ExportFinished = true;
+        If DebugPrint Then Print("GNET historical rows written: ", RowCount:0:0);
+    End;
+End;
+
+EffectiveVolume = DeclaredVolume;
+EffectiveVolumeSource = "unknown";
+If DeclaredVolume <> "unknown" Then EffectiveVolumeSource = "declared";
+If EvidenceHits >= 2 Then Begin
+    EffectiveVolume = "trade_volume";
+    EffectiveVolumeSource = "one_tick_gt_one";
+End;
+Plot1(CapturedInterval, "Interval");
+Plot2(CapturedBarType, "BarType");
+Plot3(CapturedSymbol, "Asset");
+Plot4(ClockModeName, "TimeZone");
+Plot5(EffectiveVolume, "VolumeMode");
+Plot6(DeclaredBasis, "PriceBasis");
+Plot7(CapturedTimeZone, "TZCode");
+Plot8(EffectiveVolumeSource, "VolSource");
+Plot9(EvidenceHits, "VolHits");
+Plot10(ResolvedKind, "IntervalKind");
+Plot11(ResolvedTimeBasis, "TimeBasis");
+Plot12(RowCount, "RowsWritten");
+Plot13(ExportFinished, "ExportClosed");

@@ -11,13 +11,19 @@ param(
         "transformer",
         "bar_tcp",
         "tick_tcp",
-        "registry"
+        "registry",
+        "health_monitor"
     )]
     [string]$ServiceKey
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$pythonExe = Join-Path $root ".venv\Scripts\python.exe"
+
+if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
+    throw "The packaged GNET Python runtime was not found at $pythonExe. Run .\install.ps1 first."
+}
 
 $services = @{
     decision = @{
@@ -62,13 +68,23 @@ $services = @{
         Title = "9 | Registry UI | port 9020"
         Arguments = @("-m", "gnet_ui.server")
     }
+    health_monitor = @{
+        Title = "10 | GNET Health Monitor | 10 sec"
+        Script = "check_gnet_ports.ps1"
+        Arguments = @("-Watch", "-IntervalSeconds", "10")
+    }
 }
 
 $service = $services[$ServiceKey]
 Set-Location -LiteralPath $root
 $host.UI.RawUI.WindowTitle = $service.Title
 Write-Host "=== $($service.Title) ===" -ForegroundColor Cyan
-& python @($service.Arguments)
+if ($service.Script) {
+    $scriptPath = Join-Path $root $service.Script
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath @($service.Arguments)
+} else {
+    & $pythonExe @($service.Arguments)
+}
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Service exited with code $LASTEXITCODE." -ForegroundColor Red

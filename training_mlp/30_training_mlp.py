@@ -10,7 +10,30 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
+
+
+class _NoOpRunLogger:
+    """Keep local training functional when optional Weights & Biases is absent."""
+
+    @staticmethod
+    def init(**_kwargs):
+        return None
+
+    @staticmethod
+    def log(_values):
+        return None
+
+    @staticmethod
+    def finish():
+        return None
+
+
+if wandb is None or not hasattr(wandb, "init"):
+    wandb = _NoOpRunLogger()
 
 from dotenv import load_dotenv
 import os
@@ -29,7 +52,10 @@ except ModuleNotFoundError:  # Direct execution from inside training_mlp.
         purged_chronological_holdout,
     )
 
-from pipeline_paths import FEATURES_FILE as DATA_FILE, MODEL_DIR as OUTPUT_DIR
+try:
+    from training_mlp.pipeline_paths import FEATURES_FILE as DATA_FILE, MODEL_DIR as OUTPUT_DIR
+except ModuleNotFoundError:  # Direct execution from inside training_mlp.
+    from pipeline_paths import FEATURES_FILE as DATA_FILE, MODEL_DIR as OUTPUT_DIR
 RANDOM_SEED    = int(os.getenv("RANDOM_SEED",    "42"))
 BATCH_SIZE     = int(os.getenv("BATCH_SIZE",     "64"))
 EPOCHS         = int(os.getenv("EPOCHS",         "100"))
@@ -43,17 +69,34 @@ WEIGHT_DECAY   = float(os.getenv("WEIGHT_DECAY", "1e-2"))
 TEST_SIZE      = float(os.getenv("TEST_SIZE",    "0.10"))
 WANDB_PROJECT  = os.getenv("WANDB_PROJECT",  "mlp-metalabel")
 WANDB_RUN_NAME = os.getenv("WANDB_RUN_NAME", "mlp-baseline")
+VWAP_SOURCE = os.getenv("VWAP_SOURCE", "tradestation_daily_vwap")
+HISTORICAL_VWAP_FORMULA = os.getenv(
+    "HISTORICAL_VWAP_FORMULA",
+    "cumulative(OHLC4 * (Up + Down)) / cumulative(Up + Down)",
+)
+REQUIRED_TS_VOLUME_SETTING = os.getenv(
+    "REQUIRED_TS_VOLUME_SETTING", "Trade Vol"
+)
 
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
-FEATURE_COLS = [
+CANONICAL_FEATURE_COLS = [
     "parkinson_vol_5", "parkinson_vol_15", "parkinson_vol_30",
     "ofi_5", "ofi_15", "ofi_30",
     "volume_percentile", "volume_momentum",
     "amihud_illiquidity", "vwap_distance",
     "minutes_since_open", "is_first_last_30min", "day_of_week",
 ]
+FEATURE_SET = os.getenv("FEATURE_SET", "ma_13")
+if FEATURE_SET == "ma_13":
+    FEATURE_COLS = CANONICAL_FEATURE_COLS
+elif FEATURE_SET == "ma_vp_45":
+    from feat_files.canonical_volume_profile import VOLUME_PROFILE_FEATURE_NAMES
+
+    FEATURE_COLS = CANONICAL_FEATURE_COLS + list(VOLUME_PROFILE_FEATURE_NAMES)
+else:
+    raise ValueError(f"unsupported FEATURE_SET: {FEATURE_SET}")
 
 # ── 2. MODEL ──────────────────────────────────────────────────────────────────
 
@@ -164,7 +207,10 @@ def run():
     print(f"Device    : {device}")
     print(f"Output dir: {out_dir.resolve()}")
 
-    df = pd.read_csv(DATA_FILE).dropna().reset_index(drop=True)
+    if Path(DATA_FILE).suffix.lower() == ".parquet":
+        df = pd.read_parquet(DATA_FILE).dropna().reset_index(drop=True)
+    else:
+        df = pd.read_csv(DATA_FILE).dropna().reset_index(drop=True)
     if "t1" not in df.columns:
         raise ValueError(
             "Labeled dataset has no t1 column. Run study_pipeline.py to "
@@ -202,14 +248,19 @@ def run():
         "test_size": TEST_SIZE,
         "holdout_purged_events": len(holdout.purged_indices),
         "n_features": len(FEATURE_COLS), "n_samples": len(X),
+        "feature_set": FEATURE_SET, "dataset_path": str(Path(DATA_FILE).resolve()),
         "n_cv": len(X_cv), "n_test": len(X_test),
         "naive_acc": naive_acc, "feature_cols": FEATURE_COLS,
+        "vwap_source": VWAP_SOURCE,
+        "historical_vwap_formula": HISTORICAL_VWAP_FORMULA,
+        "required_tradestation_volume_setting": REQUIRED_TS_VOLUME_SETTING,
         "output_dir": str(out_dir.resolve()),
     }
     save_config(out_dir, config)
     wandb.init(project=WANDB_PROJECT, name=WANDB_RUN_NAME, config=config)
 
     results          = []
+    training_history = []
     best_fold_auc    = -np.inf
     best_fold_idx    = None
     best_model_state = None
@@ -230,9 +281,12 @@ def run():
         X_train = scaler.fit_transform(X_train)
         X_val   = scaler.transform(X_val)
 
+        train_tensor = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
         train_dl = DataLoader(
-            TensorDataset(torch.tensor(X_train), torch.tensor(y_train)),
-            batch_size=BATCH_SIZE, shuffle=False
+            train_tensor,
+            batch_size=BATCH_SIZE,
+            shuffle=False,
+            drop_last=len(train_tensor) % BATCH_SIZE == 1,
         )
         val_dl = DataLoader(
             TensorDataset(torch.tensor(X_val), torch.tensor(y_val)),
@@ -253,6 +307,13 @@ def run():
             val_loss, _, _, _ = evaluate(model, val_dl, criterion, device)
             current_lr = scheduler.get_last_lr()[0]
             scheduler.step()
+            training_history.append({
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                "learning_rate": current_lr,
+            })
 
             wandb.log({
                 f"fold_{fold+1}/train_loss": train_loss,
@@ -310,6 +371,7 @@ def run():
         fold_bar.set_postfix(acc=f"{acc:.4f}", f1=f"{f1:.4f}", auc=f"{auc:.4f}")
 
     res_df = save_cv_results(out_dir, results, naive_acc)
+    pd.DataFrame(training_history).to_csv(out_dir / "training_history.csv", index=False)
 
     torch.save(best_model_state, out_dir / "model_best.pt")
     with open(out_dir / "scaler_best.pkl", "wb") as f:

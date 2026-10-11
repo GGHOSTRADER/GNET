@@ -1,0 +1,17 @@
+# Developer/test additions. Runtime packages remain defined in one place.
+-r requirements-runtime-lock.txt
+
+pytest==7.4.4
+colorama==0.4.6
+iniconfig==1.1.1
+packaging==24.1
+pluggy==1.0.0
+
+# Complete offline training, analysis, charting, and historical VP preparation
+pandas==2.3.2
+pyarrow==16.1.0
+matplotlib==3.9.4
+python-dotenv==0.21.0
+tqdm==4.66.5
+xgboost==3.3.0
+wandb==0.29.0

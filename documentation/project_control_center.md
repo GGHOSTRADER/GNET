@@ -1,4 +1,11 @@
 # Project Control Center
+
+Start with [`diagrams/gnet_online_high_level.mmd`](../diagrams/gnet_online_high_level.mmd)
+for live trading and exact decision delivery. Use
+[`diagrams/gnet_offline_training.mmd`](../diagrams/gnet_offline_training.mmd) for
+historical preparation, canonical feature reuse, MA/VP merging, validation, and
+artifact production. The remaining diagrams expand the individual bar, tick,
+VP, and detailed live-system paths.
 > **What:** Master reference — full system component list, data flow overview, and step-by-step launch guide for the entire pipeline.
 
 ## System Flow

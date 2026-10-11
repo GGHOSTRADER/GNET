@@ -40,13 +40,14 @@
 // 2) _SendBar@xx is always changed when number of variables changes
 //      Due to how many bytes are pushed onto the stack for parameters
 #pragma comment(linker, "/EXPORT:SendBar=_SendBar@64")
+#pragma comment(linker, "/EXPORT:SendBarMode=_SendBarMode@68")
 
 
 static FailFastSocket g_client;
 static SRWLOCK g_lock = SRWLOCK_INIT;
 
-// Must have the right parameters here to send through Sendbar function
-extern "C" __declspec(dllexport) int __stdcall SendBar(
+static int send_bar_line(
+    int mode,
     const char* symbol,
     int yyyymmdd,
     int hhmmss,
@@ -62,10 +63,8 @@ extern "C" __declspec(dllexport) int __stdcall SendBar(
     char buf[512];
     const int length = std::snprintf(
         buf, sizeof(buf),
-        //%.10g is used for float and double
-        // %d is used for intergers
-        // %s for strings
-        "%s,%d,%d,%.10g,%.10g,%.10g,%.10g,%d,%d,%.10g,%d\n",
+        "%d,%s,%d,%d,%.10g,%.10g,%.10g,%.10g,%d,%d,%.10g,%d\n",
+        mode,
         (symbol ? symbol : ""),
         yyyymmdd,
         hhmmss,
@@ -81,6 +80,42 @@ extern "C" __declspec(dllexport) int __stdcall SendBar(
     const bool sent = connected && g_client.send_all(buf, length);
     ReleaseSRWLockExclusive(&g_lock);
     return sent ? 1 : 0;
+}
+
+// mode: 0=LIVE, 1=BOOTSTRAP, 2=BOOTSTRAP_END
+extern "C" __declspec(dllexport) int __stdcall SendBarMode(
+    int mode,
+    const char* symbol,
+    int yyyymmdd,
+    int hhmmss,
+    double o,
+    double h,
+    double l,
+    double c,
+    int up,
+    int down,
+    double vwap,
+    int bar
+) {
+    if (mode < 0 || mode > 2) return 0;
+    return send_bar_line(mode, symbol, yyyymmdd, hhmmss, o, h, l, c, up, down, vwap, bar);
+}
+
+// Must have the right parameters here to send through Sendbar function
+extern "C" __declspec(dllexport) int __stdcall SendBar(
+    const char* symbol,
+    int yyyymmdd,
+    int hhmmss,
+    double o,
+    double h,
+    double l,
+    double c,
+    int up,
+    int down,
+    double vwap,
+    int bar
+) {
+    return send_bar_line(0, symbol, yyyymmdd, hhmmss, o, h, l, c, up, down, vwap, bar);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {

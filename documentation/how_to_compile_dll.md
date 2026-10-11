@@ -111,7 +111,7 @@ Make sure the `External` path in the indicator points to the compiled `.dll`, no
 
 | DLL | Source | Port | Direction | Function |
 |---|---|---|---|---|
-| `BarBridge.dll` | `dll.cpp` | `9009` | TS → Python | `SendBar()` |
+| `BarBridge.dll` | `dll.cpp` | `9009` | TS → Python | `SendBar()` / `SendBarMode()` |
 | `TickBridge.dll` | `tick_dll.cpp` | `9010` | TS → Python | `SendTick()` |
 | `SignalBridge.dll` | `signal_dll.cpp` | `9011` | Python → TS | `RecvDecision(instance_id)` |
 | `StrategyBridge.dll` | `strategy_dll.cpp` | `9012` | TS → Python | `SendCandidate()` / `GetLastCandidateId()` |

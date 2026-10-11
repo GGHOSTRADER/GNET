@@ -23,7 +23,7 @@ from datetime import datetime
 import redis
 
 # 🟦 ADD HERE (imports): you need the codec/validator at the boundary
-from netwo_files.bar_codec import parse_csv_line, bar_to_redis_fields
+from netwo_files.bar_codec import parse_bar_wire_line, bar_to_redis_fields
 from netwo_files.bar_contract import validate_sequence, ContractError
 from netwo_files.bar_codec import DecodeError
 
@@ -43,12 +43,12 @@ def _handle_client(conn, redis_client) -> None:
                 line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
-                if len(line.split(",")) != 11:
+                if len(line.split(",")) not in (11, 12):
                     print(f"[bar_server] Malformed line: {line}")
                     continue
 
                 try:
-                    bar = parse_csv_line(line)
+                    ingest_mode, bar = parse_bar_wire_line(line)
                 except (DecodeError, ContractError) as exc:
                     print(
                         f"[bar_server] Decode/Contract violation: {exc} | line={line}"
@@ -57,11 +57,11 @@ def _handle_client(conn, redis_client) -> None:
 
                 redis_client.xadd(
                     REDIS1_STREAM_NAME,
-                    bar_to_redis_fields(bar),
+                    bar_to_redis_fields(bar, ingest_mode=ingest_mode),
                     maxlen=1_000,
                     approximate=True,
                 )
-                print(f"{datetime.now().isoformat()}  {line}")
+                print(f"{datetime.now().isoformat()}  mode={ingest_mode} {line}")
 
 
 def _accept_forever(server, redis_client) -> None:

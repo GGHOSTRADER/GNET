@@ -22,7 +22,7 @@ GNET es una infraestructura completa que captura datos de TradeStation en tiempo
 
 La propuesta no es "el modelo ML es mejor que un MA cruzado". Es: **las señales de indicadores técnicos fijos tienen una tasa de éxito promedio — un modelo de probabilidad dinámica puede aprender cuándo esas señales tienen alta o baja probabilidad de éxito en el contexto actual del mercado.**
 
-![[trading_signal_pipeline 1.png]]
+![[assets/trading_signal_pipeline.png]]
 ---
 
 ## Por qué el swing estadístico y el intradiario con ML son complementarios

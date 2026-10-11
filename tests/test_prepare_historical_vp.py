@@ -48,6 +48,29 @@ def test_discover_default_inputs_finds_all_numbered_exports_in_numeric_order(tmp
     ]
 
 
+def test_discover_default_inputs_includes_dated_exports_after_legacy(tmp_path):
+    for name in (
+        "volumeprof2.txt",
+        "volumeprof1.txt",
+        "volumeprof_2026-09-01_to_2026-09-20.txt",
+        "volumeprof_2026-08-14_to_2026-08-31.txt",
+    ):
+        (tmp_path / name).touch()
+
+    assert [path.name for path in discover_default_inputs(tmp_path)] == [
+        "volumeprof1.txt",
+        "volumeprof2.txt",
+        "volumeprof_2026-08-14_to_2026-08-31.txt",
+        "volumeprof_2026-09-01_to_2026-09-20.txt",
+    ]
+
+
+def test_discover_default_inputs_rejects_reversed_dated_range(tmp_path):
+    (tmp_path / "volumeprof_2026-09-20_to_2026-09-01.txt").touch()
+    with pytest.raises(HistoricalVPError, match="reversed date range"):
+        discover_default_inputs(tmp_path)
+
+
 def test_discover_default_inputs_rejects_empty_directory(tmp_path):
     with pytest.raises(HistoricalVPError, match="no inputs found"):
         discover_default_inputs(tmp_path)
@@ -72,9 +95,9 @@ def test_prepare_keeps_one_copy_of_identical_overlapping_session(tmp_path):
     assert summary["input_rows"] == 5
     assert summary["output_sessions"] == 2
     assert summary["overlap_sessions"] == 1
-    first_session = pq.read_table(
+    first_session = pq.ParquetFile(
         output / "parquet" / "session_date=2026-07-16" / "ticks.parquet"
-    )
+    ).read()
     assert first_session.num_rows == 2
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     overlap_decision = manifest["partitions"][0]

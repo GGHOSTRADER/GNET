@@ -11,6 +11,8 @@ $TRADESTATION_SHORTCUT = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\T
 $ROUTER_READY_KEY = "gnet:strategy_router:ready"
 $RUNTIME_DIR = Join-Path $ROOT ".runtime"
 $PROCESS_REGISTRY = Join-Path $RUNTIME_DIR "gnet_processes.json"
+$PYTHON_EXE = Join-Path $ROOT ".venv\Scripts\python.exe"
+$PYTHON_COMMAND = "& '$PYTHON_EXE'"
 $script:ManagedProcesses = @()
 $script:GridServiceIndex = 0
 $script:WindowsTerminal = $null
@@ -30,14 +32,28 @@ function Register-ManagedProcess {
 }
 
 function Open-Terminal {
-    param([string]$Title, [string]$Command, [string]$ServiceKey)
+    param(
+        [string]$Title,
+        [string]$Command,
+        [string]$ServiceKey,
+        [switch]$NewGridTab,
+        [string]$GridTabTitle
+    )
     $cmd = "cd '$ROOT'; `$host.UI.RawUI.WindowTitle = '$Title'; $Command"
     if ($Grid) {
         $serviceRunner = Join-Path $ROOT "automation\run_service_terminal.ps1"
         $tabTitles = @("Strategy", "Tick Pipeline", "Bar and Operations")
         $position = $script:GridServiceIndex % 3
         $tabIndex = [math]::Floor($script:GridServiceIndex / 3)
-        if ($position -eq 0) {
+        if ($NewGridTab) {
+            $arguments = @(
+                "-w", "GNET", "new-tab",
+                "--title", $GridTabTitle,
+                "-d", $ROOT,
+                "powershell.exe", "-NoProfile", "-NoExit", "-File", $serviceRunner,
+                "-ServiceKey", $ServiceKey
+            )
+        } elseif ($position -eq 0) {
             $arguments = @(
                 "-w", "GNET", "new-tab",
                 "--title", $tabTitles[$tabIndex],
@@ -172,8 +188,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "      Redis running on 127.0.0.1:6381" -ForegroundColor Green
 Wait-Redis
 
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw "Python was not found on PATH. Activate the GNET environment first."
+if (-not (Test-Path -LiteralPath $PYTHON_EXE -PathType Leaf)) {
+    throw "The packaged GNET Python runtime was not found at $PYTHON_EXE. Run .\install.ps1 first."
 }
 if ($Grid) {
     $script:WindowsTerminal = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
@@ -203,47 +219,47 @@ Save-ProcessRegistry
 
 # Decision return path must listen before any candidate can be processed.
 Open-Terminal -Title "1 | Decision TCP     | port 9011" `
-              -Command "python -m inference.signal_tcp_server" `
+              -Command "$PYTHON_COMMAND -m inference.signal_tcp_server" `
               -ServiceKey "decision"
 Wait-ListeningPort -Port 9011
 
 # Router must subscribe before feature or candidate producers begin.
 docker exec redis1 redis-cli del $ROUTER_READY_KEY | Out-Null
 Open-Terminal -Title "2 | Strategy Router" `
-              -Command "python -m inference.strategy_router" `
+              -Command "$PYTHON_COMMAND -m inference.strategy_router" `
               -ServiceKey "router"
 Wait-Router
 
 Open-Terminal -Title "3 | Candidate TCP    | port 9012" `
-              -Command "python -m inference.candidate_tcp_server" `
+              -Command "$PYTHON_COMMAND -m inference.candidate_tcp_server" `
               -ServiceKey "candidate"
 Wait-ListeningPort -Port 9012
 
 # Tick services occupy one tab; consumers start before the TCP producer.
 Open-Terminal -Title "4 | Tick Validator" `
-              -Command "python -m netwo_files.tick_validator" `
+              -Command "$PYTHON_COMMAND -m netwo_files.tick_validator" `
               -ServiceKey "validator"
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "5 | Volume Profile" `
-              -Command "python -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925" `
+              -Command "$PYTHON_COMMAND -m feat_files.volume_profile --tick-size 0.25 --range-ticks 600 --snapshot-interval-s 30 --snapshot-offset-s 29.925" `
               -ServiceKey "volume_profile"
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "8 | Tick TCP         | port 9010" `
-              -Command "python -m netwo_files.tcp_to_redis_ticks" `
+              -Command "$PYTHON_COMMAND -m netwo_files.tcp_to_redis_ticks" `
               -ServiceKey "tick_tcp"
 Wait-ListeningPort -Port 9010
 
 # Bar and transformer services occupy the final tab. The router is already
 # subscribed before the feature producer starts.
 Open-Terminal -Title "6 | Transformer Features" `
-              -Command "python -m feat_files.transformer_features" `
+              -Command "$PYTHON_COMMAND -m feat_files.transformer_features" `
               -ServiceKey "transformer"
 Start-Sleep -Seconds 1
 
 Open-Terminal -Title "7 | Bar TCP          | port 9009" `
-              -Command "python -m netwo_files.tcp_to_redis_connection" `
+              -Command "$PYTHON_COMMAND -m netwo_files.tcp_to_redis_connection" `
               -ServiceKey "bar_tcp"
 Wait-ListeningPort -Port 9009
 
@@ -255,7 +271,7 @@ try {
 }
 if ($existingRegistry.StatusCode -ne 200) {
     Open-Terminal -Title "9 | Registry UI      | port 9020" `
-                  -Command "python -m gnet_ui.server" `
+                  -Command "$PYTHON_COMMAND -m gnet_ui.server" `
                   -ServiceKey "registry"
 } else {
     $registryListener = Get-NetTCPConnection -State Listen -LocalPort 9020 -ErrorAction SilentlyContinue |
@@ -278,11 +294,22 @@ if (-not (Test-Path -LiteralPath $TRADESTATION_SHORTCUT)) {
 }
 Start-Process $TRADESTATION_SHORTCUT
 Write-Host "      TradeStation launched." -ForegroundColor Green
+
+# Health monitoring gets a dedicated fourth dashboard tab. It continuously
+# shows whether all four TradeStation-facing GNET endpoints are listening.
+if ($Grid) {
+    Open-Terminal -Title "10 | GNET Health Monitor | 10 sec" `
+                  -Command "" `
+                  -ServiceKey "health_monitor" `
+                  -NewGridTab `
+                  -GridTabTitle "Health"
+}
+
 Start-Process "http://127.0.0.1:9020"
 
 Write-Host "`n=== All services launched ===" -ForegroundColor Cyan
 if ($Grid) {
-    Write-Host "   One GNET Windows Terminal window contains 3 tabs with 3 panes each." -ForegroundColor White
+    Write-Host "   One GNET Windows Terminal window contains 3 service tabs plus 1 health-monitoring tab." -ForegroundColor White
 } else {
     Write-Host "   Up to 9 service terminals are open; an existing registry UI is reused." -ForegroundColor White
 }

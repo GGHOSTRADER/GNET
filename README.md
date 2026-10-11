@@ -8,7 +8,50 @@ model only when TradeStation sends an actual primary-signal candidate.
 
 ---
 
+## Customer installation
+
+Install the delivered source tree at `C:\GNET`, open PowerShell there, and run:
+
+```powershell
+.\install.ps1
+```
+
+This creates an isolated `.venv`, installs the pinned live and training dependencies,
+and verifies the DLL, EasyLanguage, registry, canonical 13-feature, scaler, and model
+contracts. Docker Desktop and TradeStation remain separate manual installations.
+
+See [the customer installation guide](documentation/customer_installation_guide.md) for
+all prerequisites, TradeStation setup, Redis behavior, verification, and shutdown steps.
+For routine daily operation after installation, use [Quick Start](documentation/guides/QUICK_START.md).
+For the offline backtester (bar building, primary strategy, optional exit search
+and backtest statistics), use [the Backtester Guide](documentation/guides/BACKTESTER_GUIDE.md).
+For delivery validation and customer sign-off, use
+[the customer acceptance checklist](documentation/guides/CUSTOMER_ACCEPTANCE.md).
+For data preparation, leakage-controlled validation, retraining, and model promotion, use
+[the training guide](documentation/guides/TRAINING_GUIDE.md).
+For architecture, extension points, protocols, testing, DLL builds, and release practices,
+use [the developer guide](documentation/guides/DEVELOPER_GUIDE.md).
+For symptom-based recovery and diagnostic commands, use
+[the troubleshooting guide](documentation/guides/TROUBLESHOOTING.md).
+For the exact delivered baseline, exclusions, VP status, limitations, and final-release
+conditions, use [the release notes](documentation/guides/RELEASE_NOTES.md).
+The complete delivery-document map is in
+[the documentation index](documentation/INDEX.md), and the operational/customer boundary is
+summarized in [limitations and responsibilities](documentation/guides/LIMITATIONS_AND_RESPONSIBILITIES.md).
+The non-exclusive source-code license discussion draft is in
+[the source-code license discussion draft](documentation/legal/SOURCE_CODE_LICENSE_AGREEMENT_DRAFT_ES.md) and
+must be reviewed by qualified Guatemalan counsel before signature.
+The formal third-party component and license inventory is in
+[the third-party component inventory](documentation/legal/THIRD_PARTY_COMPONENTS.md).
+
+---
+
 ## System Overview
+
+For independent offline ES tick replay, reconstructed bars, strategy entries,
+and parallel adaptive stop/target/time searches, see the
+[GNET Backtester guide](documentation/backtester.md). It does not require the
+live services below and leaves the existing independent-entry collector intact.
 
 ```
 TradeStation
@@ -35,6 +78,29 @@ TradeStation strategies → StrategyBridge.dll (9012) → candidates ───�
 
 ## Live Pipeline — Launch Order
 
+The tested MA-13 customer runtime uses CPython 3.12.7 and the exact package
+versions in `requirements-runtime-lock.txt`. Install them with:
+
+```powershell
+python -m pip install -r requirements-runtime-lock.txt
+```
+
+`requirements-development-lock.txt` adds the test tooling used by developers;
+it is not required on a customer trading machine.
+
+After launching the complete pipeline, run the automated installation checks
+and complete the required TradeStation simulation attestation:
+
+```powershell
+.\verify_install.ps1
+```
+
+The script refuses to record manual acceptance unless files, x86 DLLs, pinned
+Python runtime, model/scaler, registry, Docker, Redis, router readiness, and
+ports 9009–9012 plus the registry page on 9020 all pass first. Use
+`-AutomatedOnly` for a non-interactive result or `-SkipServiceChecks` while
+validating a package before its services are launched.
+
 ### Step 1 — Infrastructure
 ```powershell
 .\launch_grid.ps1
@@ -59,6 +125,19 @@ Check all four TradeStation-facing ports at any time:
 
 The dashboard refreshes every ten seconds. Press `Ctrl+C` to stop it. Run
 `.\check_gnet_ports.ps1` without `-Watch` for a single scriptable check.
+
+For the bounded seven-day live-market test, first confirm TradeStation is using
+a simulation account, then start the passive evidence recorder in a separate
+terminal:
+
+```powershell
+.\start_live_test.ps1 -SimulationConfirmed
+```
+
+The observer never submits orders or connects to the four DLL-facing TCP
+listeners. It writes health, stream, exact-candidate, decision, latency, and
+pending-acknowledgement evidence under `live_test_runs\<timestamp>`. Follow
+`documentation\seven_day_live_test.md` for the daily checks and stop criteria.
 
 Stop or restart the PID-scoped GNET service trees without clearing Redis.
 Plain `stop.ps1` leaves Docker Desktop, `redis1`, Redis data, and TradeStation
@@ -212,7 +291,7 @@ Redis: `127.0.0.1:6381` (Docker)
 | `training_mlp/study_pipeline.py` | Builds labeled dataset from raw TradeStation exports |
 | `training_mlp/30_training_mlp.py` | Purged-embargo CV training |
 | `training_mlp/30_evaluate_mlp.py` | Held-out test evaluation |
-| `launch_grid.ps1` | Recommended one-window, three-tab pipeline launcher |
+| `launch_grid.ps1` | Recommended one-window launcher: three service tabs plus a dedicated live GNET health-monitoring tab |
 | `launch.ps1` | Legacy nine-window pipeline launcher and grid implementation core |
 
 ---
@@ -229,4 +308,6 @@ Full docs in `documentation/`. Key references:
 - `documentation/model_registry_ui.md` — directory registry and local management page
 - `documentation/features_list.md` — all 13 features with formulas
 - `documentation/redis_setup.md` — Redis setup and stream reference
-- `diagrams/system_overview.mmd` — full architecture diagram
+- `diagrams/gnet_online_high_level.mmd` — high-level live architecture with offline training compressed to its deployed artifacts
+- `diagrams/gnet_offline_training.mmd` — historical preparation, canonical features, safe MA/VP merge, correlation, validation, and artifact production
+- `diagrams/system_overview.mmd` — detailed live system architecture

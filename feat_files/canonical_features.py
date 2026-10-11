@@ -1,8 +1,8 @@
 """Canonical MA2CrossLE feature definitions shared by training and live code.
 
-The engine consumes bars in chronological order.  It deliberately owns the
-calendar-day VWAP accumulator because that is how the dataset used to train the
-deployed MA2CrossLE model was built.
+The engine consumes 30-second bars in chronological order. Canonical VWAP is
+the ES-session cumulative sum of close * (up + down) / sum(up + down).
+An explicit bar mode is retained for separate TradeStation-VWAP experiments.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Deque
 
 
@@ -24,6 +24,7 @@ FEATURE_NAMES = (
 
 WINDOW_SIZE = 60
 _OPEN_S = 9 * 3600 + 30 * 60
+_ES_SESSION_START_ET_S = 18 * 3600
 
 
 class CanonicalFeatureError(ValueError):
@@ -129,12 +130,14 @@ def session_boundary_flag(time_s: int) -> int:
     return int(minutes <= 30.0 or minutes >= 360.0)
 
 
-def calculate_features(bars: list[Any], calendar_day_vwap: float) -> FeatureValues:
+def calculate_features(bars: list[Any], vwap: float) -> FeatureValues:
     if len(bars) != WINDOW_SIZE:
         raise CanonicalFeatureError(f"features need {WINDOW_SIZE} bars, got {len(bars)}")
     current = bars[-1]
     atr = average_true_range(bars)
-    vwap_distance = math.nan if atr == 0 else (current.close - calendar_day_vwap) / atr
+    if not math.isfinite(vwap) or vwap <= 0:
+        raise CanonicalFeatureError(f"invalid VWAP: {vwap!r}")
+    vwap_distance = math.nan if atr == 0 else (current.close - vwap) / atr
     return FeatureValues(
         parkinson_vol_5=parkinson_vol(bars, 5),
         parkinson_vol_15=parkinson_vol(bars, 15),
@@ -155,7 +158,16 @@ def calculate_features(bars: list[Any], calendar_day_vwap: float) -> FeatureValu
 class FeatureEngine:
     """Incremental canonical calculator for chronological bar streams."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, vwap_mode: str = "canonical",
+        session_start_s: int = _ES_SESSION_START_ET_S,
+    ) -> None:
+        if vwap_mode not in {"canonical", "bar"}:
+            raise ValueError(f"unknown VWAP mode: {vwap_mode}")
+        if not 0 <= session_start_s < 86400:
+            raise ValueError(f"invalid session start: {session_start_s}")
+        self._vwap_mode = vwap_mode
+        self._session_start_s = session_start_s
         self._bars: Deque[Any] = deque(maxlen=WINDOW_SIZE)
         self._date: date | None = None
         self._cumulative_price_volume = 0.0
@@ -167,20 +179,26 @@ class FeatureEngine:
 
     def update(self, bar: Any) -> FeatureValues | None:
         bar_date = _actual_date(bar.date)
-        if bar_date != self._date:
-            self._date = bar_date
+        session_date = (
+            bar_date + timedelta(days=1)
+            if int(bar.time_s) >= self._session_start_s else bar_date
+        )
+        if session_date != self._date:
+            self._date = session_date
             self._cumulative_price_volume = 0.0
             self._cumulative_volume = 0
-
         volume = _volume(bar)
-        self._cumulative_price_volume += bar.close * volume
+        self._cumulative_price_volume += float(bar.close) * volume
         self._cumulative_volume += volume
         self._bars.append(bar)
 
         if len(self._bars) < WINDOW_SIZE:
             return None
-        if self._cumulative_volume == 0:
-            calendar_day_vwap = math.nan
+        if self._vwap_mode == "bar":
+            vwap = float(bar.vwap)
         else:
-            calendar_day_vwap = self._cumulative_price_volume / self._cumulative_volume
-        return calculate_features(list(self._bars), calendar_day_vwap)
+            vwap = (
+                self._cumulative_price_volume / self._cumulative_volume
+                if self._cumulative_volume else math.nan
+            )
+        return calculate_features(list(self._bars), vwap)

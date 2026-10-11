@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "properties": {
+    "asset": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "matching_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$"
+      },
+      "maxItems": 100,
+      "minItems": 0
+    },
+    "source_only": {
+      "type": "boolean"
+    },
+    "bar_kind": {
+      "enum": [
+        "all",
+        "ticks",
+        "seconds",
+        "minutes",
+        "volume",
+        "mixed",
+        "none"
+      ]
+    },
+    "date_start": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\d$"
+    },
+    "date_end": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\d$"
+    },
+    "search": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "sort": {
+      "enum": [
+        "recent",
+        "oldest",
+        "name",
+        "asset",
+        "coverage_newest"
+      ]
+    },
+    "collection": {
+      "enum": [
+        "all",
+        "tick_sources",
+        "tradestation_bars",
+        "research_bars",
+        "feature_datasets",
+        "training_datasets",
+        "legacy_sources"
+      ]
+    },
+    "process": {
+      "enum": [
+        "all",
+        "vp_features",
+        "bar_building",
+        "primary_research",
+        "bar_features",
+        "training"
+      ]
+    },
+    "only_enabled": {
+      "type": "boolean"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "page_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    }
+  },
+  "additionalProperties": false,
+  "required": []
+}

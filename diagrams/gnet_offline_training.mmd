@@ -1,0 +1,102 @@
+---
+title: GNET - Offline Data and Training Architecture
+config:
+  themeCSS: |
+    .titleText { font-size: 34px !important; font-weight: 700 !important; }
+---
+flowchart TB
+
+    subgraph LEGEND["Legend"]
+        direction LR
+        LMA["Blue: MA bars and labels"]
+        LVP["Green: historical ticks and VP"]
+        LANALYSIS["Orange: merge, analysis and validation"]
+        LOUTPUT["Purple: deployable output"]
+    end
+
+    subgraph EXPORTS["Historical TradeStation exports"]
+        direction LR
+        BARS["30-second bars<br/>Date, Time, OHLC, Up, Down"]
+        TRADES["MA trade report<br/>entry, result and exit time"]
+        TICKS["Historical tick exports<br/>Up and Down classification"]
+    end
+
+    subgraph SHARED_MATH["Shared canonical math - identical to live"]
+        direction LR
+        CANON_MA["canonical_features.py<br/>13 MA features"]
+        CANON_VP["canonical_volume_profile.py<br/>32 VP features"]
+    end
+
+    subgraph MA_PIPELINE["MA event dataset"]
+        direction LR
+        MA_PREP["Chronological bars and 60-bar warm-up"]
+        MA_LABELS["Match entries to outcomes<br/>Label + t1 exit time"]
+        MA_DATA["Canonical MA dataset<br/>13 features + Label + t1"]
+    end
+
+    BARS --> MA_PREP -->|"calls"| CANON_MA
+    CANON_MA -.->|"returns 13 values"| MA_PREP
+    TRADES --> MA_LABELS
+    MA_PREP --> MA_DATA
+    MA_LABELS --> MA_DATA
+
+    subgraph VP_PIPELINE["Historical volume-profile dataset"]
+        direction LR
+        CLEAN["Validate, deduplicate and assign 18:00 session"]
+        PARQUET["Compressed session Parquets"]
+        REPLAY["Replay every tick and commit once per interval"]
+        VP_DATA["Canonical VP dataset<br/>32 features"]
+    end
+
+    TICKS --> CLEAN --> PARQUET --> REPLAY
+    REPLAY -->|"calls"| CANON_VP
+    CANON_VP -.->|"returns 32 values"| REPLAY
+    REPLAY --> VP_DATA
+
+    SAFE_JOIN["Leakage-safe merge<br/>freshest same-session VP snapshot at or before MA entry"]
+    MA_DATA --> SAFE_JOIN
+    VP_DATA --> SAFE_JOIN
+
+    COMBINED["Combined candidate dataset<br/>13 MA + 32 VP + Label + t1 + audit metadata"]
+    SAFE_JOIN --> COMBINED
+
+    subgraph RESEARCH["Fair model comparison"]
+        direction LR
+        CORR_MA["MA Pearson / Spearman report"]
+        CORR_VP["VP Pearson / Spearman report"]
+        BASELINE["Baseline<br/>13 MA features"]
+        FULL["Full VP<br/>45 features"]
+        REDUCED["Reduced VP<br/>correlation-informed subset"]
+        PURGED["Same purged walk-forward folds<br/>t1 prevents overlapping-label leakage"]
+        CPCV["Optional CPCV<br/>expectation distribution"]
+    end
+
+    COMBINED -->|"same overlap rows"| CORR_MA
+    COMBINED --> CORR_VP
+    COMBINED --> BASELINE
+    COMBINED --> FULL
+    CORR_MA --> REDUCED
+    CORR_VP --> REDUCED
+    BASELINE --> PURGED
+    FULL --> PURGED
+    REDUCED --> PURGED
+    PURGED -->|"finalist only"| CPCV
+
+    ARTIFACTS["Versioned model artifacts<br/>model + scaler + exact feature contract"]
+    PURGED -->|"selected model"| ARTIFACTS
+    CPCV -->|"expectation evidence"| ARTIFACTS
+    ARTIFACTS -->|"enabled through registry"| LIVE["Online strategy router"]
+
+    classDef maPath fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef vpPath fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef analysisPath fill:#ffedd5,stroke:#ea580c,color:#7c2d12,stroke-width:2px
+    classDef outputPath fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
+
+    class BARS,TRADES,CANON_MA,MA_PREP,MA_LABELS,MA_DATA maPath
+    class TICKS,CANON_VP,CLEAN,PARQUET,REPLAY,VP_DATA vpPath
+    class SAFE_JOIN,COMBINED,CORR_MA,CORR_VP,BASELINE,FULL,REDUCED,PURGED,CPCV analysisPath
+    class ARTIFACTS,LIVE outputPath
+    class LMA maPath
+    class LVP vpPath
+    class LANALYSIS analysisPath
+    class LOUTPUT outputPath

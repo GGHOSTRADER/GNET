@@ -30,7 +30,7 @@ Features emitted
   volume_percentile        -- Rank of current bar volume in last 60 bars (0-1)
   volume_momentum          -- Volume % change vs 5 bars ago
   amihud_illiquidity       -- rolling 30-bar mean of |pct_change(close)| / (close * volume)
-  vwap_distance            -- (close - vwap) / ATR(14)
+  vwap_distance            -- (close - TradeStation daily VWAP) / ATR(14)
   minutes_since_open       -- Minutes elapsed since 09:30
   is_first_last_30min      -- 1 if in first or last 30 min of session
 
@@ -69,7 +69,11 @@ from config.setting import (
     REDIS1_FEATURES_TRANSFORMER_STREAM,
 )
 from netwo_files.redis_tool import get_redis_connection
-from netwo_files.bar_codec import parse_xread_to_bars
+from netwo_files.bar_codec import (
+    BAR_MODE_BOOTSTRAP,
+    BAR_MODE_BOOTSTRAP_END,
+    bar_from_redis_fields,
+)
 from feat_files.canonical_features import FeatureEngine, WINDOW_SIZE
 
 _WINDOW = WINDOW_SIZE           # largest rolling window (volume_percentile)
@@ -121,11 +125,14 @@ def stream_bars_from_redis(
 
     while True:
         xread_result = r.xread({REDIS1_STREAM_NAME: last_id}, count=count, block=block_ms)
-        batch = parse_xread_to_bars(xread_result)
-        if not batch.bars:
+        if not xread_result:
             continue
-        last_id = batch.last_ids[REDIS1_STREAM_NAME]
-        yield from batch.bars
+        for _stream, entries in xread_result:
+            for entry_id, fields in entries:
+                last_id = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
+                mode_raw = fields.get(b"ingest_mode", fields.get("ingest_mode", "live"))
+                mode = mode_raw.decode() if isinstance(mode_raw, bytes) else str(mode_raw)
+                yield mode, bar_from_redis_fields(fields)
 
 
 # ============================================================
@@ -146,14 +153,30 @@ def stream_feature_points(
     - Emit FeaturePoint once window is full
     """
     engine = FeatureEngine()
+    bootstrap_active = False
 
-    for bar in stream_bars_from_redis(block_ms=block_ms, count=count, start_id=start_id):
+    for mode, bar in stream_bars_from_redis(block_ms=block_ms, count=count, start_id=start_id):
+        if mode == BAR_MODE_BOOTSTRAP and not bootstrap_active:
+            engine = FeatureEngine()
+            bootstrap_active = True
+            print("[bootstrap] rebuilding canonical feature state")
+        elif mode == BAR_MODE_BOOTSTRAP_END and not bootstrap_active:
+            engine = FeatureEngine()
+            bootstrap_active = True
+            print("[bootstrap] rebuilding canonical feature state from final bar")
+
         values = engine.update(bar)
         if values is None:
             print(f"[warming up] {engine.bars_seen}/{_WINDOW} bars")
+            if mode == BAR_MODE_BOOTSTRAP_END:
+                bootstrap_active = False
+                print(
+                    f"[bootstrap] incomplete bars={engine.bars_seen}/{_WINDOW} "
+                    f"date={bar.date} time_s={bar.time_s}"
+                )
             continue
 
-        yield FeaturePoint(
+        point = FeaturePoint(
             symbol=bar.symbol,
             date=bar.date,
             time_s=bar.time_s,
@@ -172,6 +195,10 @@ def stream_feature_points(
             is_first_last_30min=values.is_first_last_30min,
             day_of_week=values.day_of_week,
         )
+        if mode == BAR_MODE_BOOTSTRAP_END:
+            bootstrap_active = False
+            print(f"[bootstrap] complete bars={engine.bars_seen} date={bar.date} time_s={bar.time_s}")
+        yield point
 
 
 # ============================================================

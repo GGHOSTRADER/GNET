@@ -7,7 +7,30 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classificat
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
+
+
+class _NoOpRunLogger:
+    """Keep local evaluation functional when optional W&B is unavailable."""
+
+    @staticmethod
+    def init(**_kwargs):
+        return None
+
+    @staticmethod
+    def log(_values):
+        return None
+
+    @staticmethod
+    def finish():
+        return None
+
+
+if wandb is None or not hasattr(wandb, "init"):
+    wandb = _NoOpRunLogger()
 
 from dotenv import load_dotenv
 import os

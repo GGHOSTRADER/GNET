@@ -89,9 +89,23 @@ candidates; they do not remove features automatically.
 
 ## Live-Parity Follow-up
 
-Offline temporal state now commits once per interval. The live adapter still
-previously called a committing snapshot on every qualifying final-second tick. The live adapter now commits once at the wall-clock `29.925` gate. Before a
-VP-dependent model is trained or deployed, update live publication to emit
-fresh previews throughout the final second but commit temporal history only
-once. The current MA model remains correctly isolated on its trained 13-feature
-contract and does not consume this dataset.
+Offline temporal state commits once per interval, and the live adapter commits
+once at the wall-clock `29.925` gate. The current MA model remains correctly
+isolated on its trained 13-feature contract and does not consume this dataset.
+
+## Leakage-Safe MA Merge
+
+`training_mlp.merge_ma_vp_features` joins each labeled MA entry to the freshest
+canonical VP snapshot at or before the entry timestamp within the same symbol
+and 18:00 ES session. Its default 30-second tolerance rejects missing or stale
+profiles. The output keeps `t1` as purge metadata and `Label` as the target;
+neither the join audit columns nor timestamps enter the 45-feature model
+contract. Run it from the repository root:
+
+```powershell
+python -m training_mlp.merge_ma_vp_features
+```
+
+The first real merge produced 4,432 complete rows covering March 15 through
+May 21, 2026. Every match used the immediately preceding final-second VP row,
+giving a measured offline age of exactly 1,000 ms and no future snapshots.

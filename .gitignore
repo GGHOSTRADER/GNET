@@ -18,6 +18,10 @@ __pycache__/
 # Obsidian
 .obsidian/
 
+# Local AI assistant state
+/.claude/
+/.codex/
+
 # Compiled binaries
 *.dll
 *.obj

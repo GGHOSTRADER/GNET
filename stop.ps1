@@ -84,7 +84,7 @@ if (Test-Path -LiteralPath $PROCESS_REGISTRY) {
 
 # Backward compatibility for service terminals launched before PID recording
 # was added. Titles are assigned by launch.ps1 and narrowly identify GNET.
-$knownTitlePattern = "^[1-9] \| (Decision TCP|Strategy Router|Candidate TCP|Tick Validator|Volume Profile|Transformer Features|Bar TCP|Tick TCP|Registry UI)"
+$knownTitlePattern = "^(?:[1-9]|10) \| (Decision TCP|Strategy Router|Candidate TCP|Tick Validator|Volume Profile|Transformer Features|Bar TCP|Tick TCP|Registry UI|GNET Health Monitor)"
 $knownPids = @($records | ForEach-Object { [int]$_.pid })
 $titledTerminals = @(
     Get-Process -Name "powershell" -ErrorAction SilentlyContinue |
@@ -136,7 +136,7 @@ $gnetModules = @(
 $escapedModules = $gnetModules | ForEach-Object { [regex]::Escape($_) }
 $gnetModulePattern = "-m\s+(" + ($escapedModules -join "|") + ")(\s|$)"
 $gnetMonitorPattern = "check_gnet_ports\.ps1.*\s-Watch(\s|$)"
-$gnetGridPanePattern = "run_service_terminal\.ps1.*-ServiceKey\s+(decision|router|candidate|validator|volume_profile|transformer|bar_tcp|tick_tcp|registry)(\s|$)"
+$gnetGridPanePattern = "run_service_terminal\.ps1.*-ServiceKey\s+(decision|router|candidate|validator|volume_profile|transformer|bar_tcp|tick_tcp|registry|health_monitor)(\s|$)"
 $legacyProcesses = @(
     $processSnapshot |
         Where-Object {

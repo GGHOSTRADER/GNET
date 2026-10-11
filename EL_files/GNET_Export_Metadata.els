@@ -1,0 +1,163 @@
+{ GNET_Export_Metadata - INDICATOR, TradeStation 10.
+  Apply to the SAME single-data chart used for the original export.
+  Set Maximum number of bars study will reference (MaxBarsBack) manually to 1.
+  Writes one small metadata block per historical recalculation, never tick rows.
+  Unknown settings remain unknown. This is chart evidence, not file validation.
+  FileAppend only targets ExportFile + ".gnet-metadata.txt"; no file is deleted.
+}
+
+using elsystem;
+using charting;
+
+Inputs:
+    ExportFile("C:\Users\g_med\python_new\GNET\historical_vp\raw\ES\tick\test_data.txt"),
+    ChartTimeZone("unknown"),          { IANA zone matching chart timestamps }
+    VolumeMode("unknown"),             { trade_volume, tick_count, unknown }
+    PriceBasis("unknown"),             { unadjusted, adjusted, unknown }
+    IntervalKind("ticks"),             { declared: ticks, volume, unknown }
+    DebugPrint(false);
+
+Vars:
+    intrabarpersist ReportRequested(false),
+    FirstChartTime(""),
+    MetadataFile(""),
+    MetadataText(""),
+    DeclaredVolume(""),
+    DeclaredBasis(""),
+    DeclaredKind(""),
+    intrabarpersist LastEvidenceBar(-1),
+    intrabarpersist VolumeEvidenceHits(0),
+    BarTotalVolume(0),
+    DetectedVolume("unknown"),
+    EffectiveVolume("unknown"),
+    VolumeSource("unknown"),
+    int TimeZoneCode(-1),
+    TimeZoneModeName("unknown"),
+    DataStream ChartStream(null),
+    ChartingHost MetadataHost(null);
+
+Once Begin
+    If GetAppInfo(aiApplicationType) <> 1 Then
+        RaiseRunTimeError("GNET metadata requires a Chart Analysis window");
+    If MaxBarsBack <> 1 Then
+        RaiseRunTimeError("Set GNET_Export_Metadata MaxBarsBack manually to 1");
+    MetadataHost = ChartingHost.Create();
+    If MetadataHost.DataStreams.Count <> 1 Then
+        RaiseRunTimeError("GNET metadata requires a single-data chart");
+    ChartStream = MetadataHost.DataStreams.Stream[0];
+    If ChartStream.DataNum <> 0 Or ChartStream.SymbolName <> GetSymbolName Then
+        RaiseRunTimeError("GNET metadata must reference the chart's Data1 symbol");
+
+    { Read the attached chart, not a separately configured data provider. }
+    If ChartStream.TimeZone = elsystem.TimeZone.Local Then Begin
+        TimeZoneCode = 0;
+        TimeZoneModeName = "Local";
+    End
+    Else If ChartStream.TimeZone = elsystem.TimeZone.Exchange Then Begin
+        TimeZoneCode = 1;
+        TimeZoneModeName = "Exchange";
+    End
+    Else If ChartStream.TimeZone = elsystem.TimeZone.GMT Then Begin
+        TimeZoneCode = 2;
+        TimeZoneModeName = "GMT";
+    End
+    Else
+        RaiseRunTimeError("Unsupported chart timezone mode");
+    If StrLen(ExportFile) = 0 Or StrLen(ExportFile) > 230 Then
+        RaiseRunTimeError("ExportFile must name the existing export, at most 230 characters");
+    If StrLen(ChartTimeZone) = 0 Or StrLen(ChartTimeZone) > 64 Then
+        RaiseRunTimeError("ChartTimeZone must be an IANA name or unknown");
+
+    DeclaredVolume = LowerStr(VolumeMode);
+    DeclaredBasis = LowerStr(PriceBasis);
+    DeclaredKind = LowerStr(IntervalKind);
+    If DeclaredVolume <> "unknown" And DeclaredVolume <> "trade_volume" And DeclaredVolume <> "tick_count" Then
+        RaiseRunTimeError("VolumeMode: trade_volume, tick_count or unknown");
+    If DeclaredBasis <> "unknown" And DeclaredBasis <> "unadjusted" And DeclaredBasis <> "adjusted" Then
+        RaiseRunTimeError("PriceBasis: unadjusted, adjusted or unknown");
+    If DeclaredKind <> "unknown" And DeclaredKind <> "ticks" And DeclaredKind <> "volume" Then
+        RaiseRunTimeError("IntervalKind: ticks, volume or unknown");
+
+    { Recover the first loaded bar, including the one reserved by MaxBarsBack. }
+    FirstChartTime = BarDateTime[1].Format("%Y-%m-%dT%H:%M:%S");
+    MetadataFile = ExportFile + ".gnet-metadata.txt";
+End;
+
+{ Count distinct historical 1-tick bars with multiple contracts.
+  The count saturates at 2; it is evidence, not a file row count.
+  All-one totals cannot prove Tick Count.
+}
+If Not ReportRequested And GetAppInfo(aiRealTimeCalc) = 0
+   And BarType = 0 And BarInterval = 1
+   And DeclaredKind = "ticks" Then Begin
+    If CurrentBar <> LastEvidenceBar Then Begin
+        LastEvidenceBar = CurrentBar;
+        BarTotalVolume = UpTicks + DownTicks;
+        If UpTicks >= 0 And DownTicks >= 0
+           And BarTotalVolume > 1
+           And BarTotalVolume = IntPortion(BarTotalVolume) Then
+            VolumeEvidenceHits = MinList(2, VolumeEvidenceHits + 1);
+    End;
+End;
+
+DetectedVolume = "unknown";
+If VolumeEvidenceHits >= 2 Then
+    DetectedVolume = "trade_volume";
+
+EffectiveVolume = DeclaredVolume;
+VolumeSource = "unknown";
+If DeclaredVolume <> "unknown" Then
+    VolumeSource = "declared";
+
+If DetectedVolume = "trade_volume" Then Begin
+    If DeclaredVolume = "tick_count" Then
+        RaiseRunTimeError("Tick Count input conflicts with 1-tick contract-volume evidence");
+    EffectiveVolume = "trade_volume";
+    VolumeSource = "one_tick_gt_one";
+End;
+
+{ LastBarOnChartEx can be true for several ticks in the final second.
+  They have the same endpoint at our declared seconds precision. We therefore
+  record endpoints only, never infer row counts or certify a completed scan.
+  aiRealTimeCalc prevents new trades from extending this historical snapshot.
+}
+If Not ReportRequested And GetAppInfo(aiRealTimeCalc) = 0 And LastBarOnChartEx Then Begin
+    MetadataText =
+        "GNET_METADATA_BEGIN=1" + NewLine +
+        "export_file=" + ExportFile + NewLine +
+        "generated_at_local=" + DateTime.Now.Format("%Y-%m-%dT%H:%M:%S") + NewLine +
+        "chart_symbol=" + GetSymbolName + NewLine +
+        "chart_exchange=unknown" + NewLine +
+        "chart_timezone_mode=" + NumToStr(TimeZoneCode, 0) + NewLine +
+        "chart_volume_gt_one_evidence=" + NumToStr(VolumeEvidenceHits, 0) + NewLine +
+        "chart_bar_type=" + NumToStr(BarType, 0) + NewLine +
+        "chart_bar_interval=" + NumToStr(BarInterval, 0) + NewLine +
+        "chart_range_start=" + FirstChartTime + NewLine +
+        "chart_range_end=" + BarDateTime.Format("%Y-%m-%dT%H:%M:%S") + NewLine +
+        "range_scope=loaded_chart" + NewLine +
+        "timestamp_precision=seconds" + NewLine +
+        "max_bars_back=" + NumToStr(MaxBarsBack, 0) + NewLine +
+        "declared_timezone=" + ChartTimeZone + NewLine +
+        "declared_volume_mode=" + DeclaredVolume + NewLine +
+        "declared_price_basis=" + DeclaredBasis + NewLine +
+        "declared_interval_kind=" + DeclaredKind + NewLine +
+        "export_file_verified=false" + NewLine +
+        "GNET_METADATA_END=1" + NewLine;
+    FileAppend(MetadataFile, MetadataText);
+    ReportRequested = true;
+    If DebugPrint Then Begin
+        Print(MetadataText);
+        Print("GNET metadata append requested: ", MetadataFile);
+    End;
+End;
+
+{ TimeZone is detected from Data1; the IANA declaration stays in the companion. }
+Plot1(BarInterval, "Interval");
+Plot2(BarType, "BarType");
+Plot3(GetSymbolName, "Asset");
+Plot4(TimeZoneModeName, "TimeZone");
+Plot5(EffectiveVolume, "VolumeMode");
+Plot6(DeclaredBasis, "PriceBasis");
+Plot7(TimeZoneCode, "TZCode");
+Plot8(VolumeSource, "VolSource");
+Plot9(VolumeEvidenceHits, "VolHits");

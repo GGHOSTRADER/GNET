@@ -4,8 +4,8 @@
   "display_name": "MA 2 Cross Long Entry",
   "enabled": true,
   "model_type": "pytorch_mlp",
-  "artifact_dir": "training_mlp/strategies/MA2CrossLE/model/mlp_baseline",
-  "threshold": 0.5,
+  "artifact_dir": "training_mlp/strategies/MA2CrossLE/model/mlp_ts_vwap_libb",
+  "threshold": 0.52,
   "device": "cpu",
   "feature_stream": "features_transformer"
 }

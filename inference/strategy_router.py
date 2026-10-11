@@ -354,7 +354,10 @@ def run(timeout_ms: int = 250) -> None:
         except (KeyError, TypeError, ValueError):
             continue
 
-    last_feature_id = "$"
+    # Continue from the exact newest entry loaded above. Using "$" on every
+    # empty read creates a moving cursor: a feature arriving between that read
+    # and the candidate read can be skipped even though it reached Redis first.
+    last_feature_id = recent_features[0][0] if recent_features else "0-0"
     pending_candidate_id = "0-0"
     reading_pending = True
     redis_client.set(REDIS1_ROUTER_READY_KEY, "1")

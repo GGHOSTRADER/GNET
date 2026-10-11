@@ -202,10 +202,9 @@ docker run -d --name redis1 -p 6381:6379 redis
 
 ### Windows watchdog — installation and daily ON/OFF control
 
-The task is already installed on this machine. The installation command is
-shown only for rebuilding the task after moving the repository or setting up
-another computer. Run it once from an Administrator PowerShell; installation
-leaves the task disabled:
+The scheduled task is optional and is not created merely by copying the source package.
+Run the following once from an Administrator PowerShell on each computer where watchdog
+startup is wanted. Installation leaves the task disabled:
 
 ```powershell
 .\automation\install_gnet_scheduler.ps1
@@ -368,22 +367,45 @@ See [[how_to_compile_dll]] if any DLL needs to be rebuilt.
 
 ### Central bar chart
 
-1. Open a 30-second chart for the symbol used by the strategy.
-2. Apply the `g_cpp_dll_bar` indicator once.
-3. Confirm its bar interval matches the model's live feature interval.
+1. Open a 30-second chart for the **specific active futures contract** used by
+   the strategy (for example, `ESZ26`). Do not use the continuous `@ES` symbol
+   for order execution.
+2. Confirm the chart title does not contain `(D)`. `(D)` means delayed data;
+   obtain real-time CME data before testing automatic simulated execution.
+3. Apply the `g_cpp_dll_bar` indicator once.
+4. Confirm its bar interval matches the model's live feature interval.
+5. Configure the chart to load **65 bars**. This provides the canonical
+   60-bar window plus a small recovery margin without loading a large history.
+6. In the symbol/chart settings, set **For volume, use: Trade Vol**. Do not use
+   **Tick Count**. On electronic futures, the offline VWAP reconstruction relies
+   on `UpTicks + DownTicks` representing traded contracts, exactly as documented
+   by TradeStation for this setting.
 
-This chart supplies OHLC, VWAP, tick-volume proxies, symbol, date, time, and
+This chart supplies OHLC, TradeStation daily VWAP, classified trade volume,
+symbol, date, time, and
 bar number. It is a centralized data producer; do not add one copy for every
 strategy window unless a different symbol or bar series needs its own data.
-The hardened indicator uses `LastBarOnChart and BarStatus(1) = 2`, so the bars
-already visible in TradeStation are not replayed to Python. The transformer
-currently starts with an empty 60-bar window and therefore needs 60 newly
-received live bars after a fresh service start; chart history and Redis warm
-bootstrap are not wired into that startup path yet.
+On initial chart calculation and after `Ctrl+R`, the hardened indicator sends
+the bounded loaded history through `SendBarMode`: historical rows are tagged
+`BOOTSTRAP`, and the newest loaded row is tagged `BOOTSTRAP_END`. The
+transformer resets and reconstructs its canonical feature state from that
+ordered batch. Afterwards, the indicator sends only newly completed
+`LastBarOnChart` rows tagged `LIVE`. Bootstrap rows never create strategy
+candidates or orders; the strategy remains the only candidate producer.
+
+The canonical `vwap_distance` feature consumes the VWAP carried by each
+TradeStation bar. It does not rebuild VWAP from the 65-bar Python warm-up.
+Consequently, restarting Python or reloading the bounded chart history does not
+truncate the daily VWAP state.
+
+Always start the Python pipeline and confirm port 9009 is listening before
+applying or refreshing this indicator. If the initial bootstrap cannot reach
+Python, run `Ctrl+R` after the port is restored to resend the bounded history.
 
 ### Central tick chart
 
-1. Open a tick chart for the same symbol.
+1. Open a tick chart for the same specific contract as the bar/strategy chart,
+   not `@ES`, and confirm its title also has no `(D)` marker.
 2. Apply the `g_cpp_dll_tick` indicator once.
 
 This chart supplies the tick stream used by the volume-profile process. The
@@ -392,7 +414,7 @@ is required when running that part of the pipeline.
 
 Verify the saved documents before enabling them:
 
-- `g_cpp_dll_bar` must declare `BarBridge.dll` and `SendBar` only;
+- `g_cpp_dll_bar` must declare `BarBridge.dll` and `SendBarMode` only;
 - `g_cpp_dll_tick` must declare `TickBridge.dll` and `SendTick` only.
 
 Both DLLs are process-wide within TradeStation. A mistakenly saved `SendTick`
@@ -408,6 +430,34 @@ so its in-memory sequence baseline starts from the new live sequence.
 3. Apply it to every chart that should run the MA crossover strategy.
 4. Keep `StrategyId` set to `MA2CrossLE`; this selects the model registry entry.
 5. Give every applied strategy window a unique, stable `InstanceId`.
+6. Keep the embedded `StopLossAmount` and `ProfitTargetAmount` inputs at `$50`
+   per contract for one ES contract. Do not apply separate Stop Loss or Profit
+   Target strategy components; `G_MA_CROSS_NN.els` already calls
+   `SetStopLoss` and `SetProfitTarget` and intentionally contains no explicit
+   next-bar protective exits.
+7. For a current low-volume CME ES simulation, set Strategy Properties >
+   Commission to **$ per Share/Contract = $3.24**. This September 2026
+   published estimate is $1.75 TradeStation commission + $0.10 clearing +
+   $1.38 CME ES exchange fee + $0.01 NFA fee, per side and per contract; the
+   resulting round trip is $6.48. Replace it with the all-in per-side amount
+   shown on the actual account confirmation whenever the account has different
+   pricing. Keep Position Slippage separate from commission.
+8. Keep `ShowDecisionMarkers=true` to visualize exact decisions on the live
+   chart. Green `YES` means approved, red `NO` means normally rejected, and
+   yellow `ERROR` means the router returned a non-`ok` status. A matching line
+   connects each label to its exact decision bar, while the Print Log retains
+   the full error status. `DecisionMarkerOffsetPoints` controls the vertical
+   price distance between bar and label and defaults to 4 points. The connector
+   is a finite segment and does not extend beyond those endpoints. These
+   markers show live EasyLanguage receipt and are not reconstructed for
+   historical decisions.
+9. For actual orders in a simulation account, open **Studies > Edit
+   Strategies**, select `G_MA_CROSS_NN`, and check **Automate execution
+   using...** with the explicit simulation account selected. Confirmation
+   **On** requires manual approval for each future order; **Off** allows
+   unattended simulation execution. If the control is unavailable, first
+   verify that the chart uses a specific contract, has no `(D)` delayed-data
+   marker, and is connected to the simulation trade server.
 
 Example instance IDs:
 
